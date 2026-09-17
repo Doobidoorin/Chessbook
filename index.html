@@ -1,46 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Chessbook</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#100607">
+  <title>Chessbook</title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<div id="app">
+  <div id="app">
 
-  <div id="cover" class="cover">
-    <div class="cover-inner">
-      <div class="cover-title">𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</div>
-      <div class="cover-subtitle">Note your moves</div>
+    <!-- =========================
+         COVER
+    ========================== -->
+    <section id="cover" class="cover" aria-label="Open Chessbook">
+      <div class="cover-book">
+
+        <div class="cover-band cover-band-top"></div>
+
+        <div class="cover-center">
+
+          <div class="cover-emblem">CHESS</div>
+
+          <div class="cover-plaque">
+            <div class="cover-title">𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</div>
+          </div>
+
+          <div class="cover-subtitle">
+            Note your moves
+          </div>
+
+        </div>
+
+        <div class="cover-band cover-band-bottom"></div>
+
+      </div>
+
+      <div class="cover-hint">
+        Tap to open
+      </div>
+    </section>
+
+
+    <!-- =========================
+         AUTH
+    ========================== -->
+    <div id="authModal" class="auth-modal hidden">
+
+      <div class="auth-box">
+
+        <button id="authClose" class="auth-close" type="button" aria-label="Close">
+          ×
+        </button>
+
+        <div class="auth-mark">CHESSBOOK</div>
+
+        <h2 id="authTitle">Sign in</h2>
+
+        <p id="authDescription">
+          Sign in to continue to your notebook.
+        </p>
+
+        <input
+          type="text"
+          id="authUsername"
+          placeholder="Username"
+          autocomplete="username"
+          spellcheck="false"
+        >
+
+        <input
+          type="password"
+          id="authPassword"
+          placeholder="Password"
+          autocomplete="current-password"
+        >
+
+        <div id="authError" class="auth-error"></div>
+
+        <button id="authSubmit" class="auth-submit" type="button">
+          Sign in
+        </button>
+
+        <button id="authToggle" class="auth-link" type="button">
+          Need an account? Create one
+        </button>
+
+      </div>
+
     </div>
+
+
+    <!-- =========================
+         BOOK
+    ========================== -->
+    <main id="book" class="book hidden">
+
+      <div id="stage" class="stage">
+
+        <div id="pageBehind" class="page-leaf page-behind"></div>
+
+        <div id="pageCurrent" class="page-leaf page-current"></div>
+
+        <button
+          id="edgePrev"
+          class="page-edge page-edge-prev"
+          type="button"
+          aria-label="Previous page"
+        ></button>
+
+        <button
+          id="edgeNext"
+          class="page-edge page-edge-next"
+          type="button"
+          aria-label="Next page"
+        ></button>
+
+      </div>
+
+    </main>
+
   </div>
 
-  <div id="authModal" class="auth-modal hidden">
-    <div class="auth-box">
-      <h2 id="authTitle">Sign in</h2>
-      <input type="text" id="authUsername" placeholder="Username" autocomplete="username">
-      <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
-      <div id="authError" class="auth-error"></div>
-      <button id="authSubmit">Sign in</button>
-      <button id="authToggle" class="auth-link" type="button">Need an account? Create one</button>
-    </div>
-  </div>
 
-  <div id="book" class="book hidden">
-    <div id="stage" class="stage">
-      <div id="pageBehind" class="page-leaf page-behind"></div>
-      <div id="pageCurrent" class="page-leaf page-current"></div>
-      <div id="edgePrev" class="edge edge-prev"></div>
-      <div id="edgeNext" class="edge edge-next"></div>
-    </div>
-  </div>
+  <!-- Libraries -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.13.4/chess.js"></script>
 
-</div>
+  <!-- Your application -->
+  <script src="app.js"></script>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://unpkg.com/chess.js@0.13.4/chess.js"></script>
-<script src="app.js"></script>
 </body>
 </html>
