@@ -144,6 +144,8 @@ body {
   background: #f3e7d2;
   color: #140c0e;
   font-family: Georgia, serif;
+  position: relative;
+  overflow: hidden;
 }
 
 .contents-header {
@@ -182,7 +184,6 @@ body {
   font-size: 1.2rem;
   cursor: pointer;
 }
-
 .contents-entry span:last-child {
   min-width: 30px;
   text-align: right;
