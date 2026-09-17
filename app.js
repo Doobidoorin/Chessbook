@@ -42,3 +42,4 @@ async function loadContents() {
     contentsList.appendChild(entry);
   });
 }
+loadcontents();
