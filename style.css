@@ -133,9 +133,10 @@ body {
 
 .cover-content p {
   margin: 25px 0 0;
-  color: #c9a227;
+  color: #050405;
   font-size: 1rem;
   letter-spacing: 0.16em;
+  -webkit-text-stroke: 1px #7a2333;
 }
 
 
