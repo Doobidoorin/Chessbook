@@ -911,13 +911,7 @@ body {
 /* CHESS WORKSPACE */
 
 .chess-workspace {
-  display: grid;
-
-  grid-template-columns:
-    minmax(0, 1fr)
-    minmax(180px, 27%);
-
-  gap: clamp(16px, 3vw, 32px);
+  display: block;
 
   width: 100%;
 
@@ -931,11 +925,15 @@ body {
   align-items: center;
   justify-content: center;
 
+  width: min(100%, 480px);
+
   min-width: 0;
 
   aspect-ratio: 1 / 1;
 
-  max-height: 51vh;
+  max-height: 48vh;
+
+  margin: 0 auto;
 
   padding: 9px;
 
@@ -996,78 +994,20 @@ body {
 }
 
 
-/* MOVE HISTORY */
+/* MOVE HISTORY
+   Hidden visually.
+   Chess move data and controls remain available to JavaScript.
+*/
 
 .move-history-panel {
-  min-width: 0;
-
-  display: flex;
-  flex-direction: column;
-
-  min-height: 0;
-
-  border-left:
-    1px solid rgba(79, 56, 36, 0.2);
-
-  padding-left: clamp(12px, 2vw, 22px);
-}
-
-.move-history-heading {
-  padding-bottom: 9px;
-
-  border-bottom:
-    1px solid rgba(79, 56, 36, 0.2);
-
-  color: var(--muted-ink);
-
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
-
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-}
-
-.move-history-list {
-  flex: 1;
-
-  overflow-y: auto;
-
-  margin-top: 10px;
-
-  scrollbar-width: thin;
-}
-
-.move-row {
-  display: grid;
-
-  grid-template-columns: 34px 1fr 1fr;
-
-  padding: 7px 4px;
-
-  border-bottom:
-    1px dotted rgba(79, 56, 36, 0.18);
-
-  font-size: 14px;
-}
-
-.move-number {
-  color: var(--muted-ink);
-}
-
-.move-white,
-.move-black {
-  color: var(--ink);
+  display: none !important;
 }
 
 
 /* NOTES */
 
 .notes-section {
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
 .notes-label {
@@ -1078,7 +1018,8 @@ body {
   display: block;
 
   width: 100%;
-  height: clamp(85px, 15vh, 125px);
+
+  height: clamp(150px, 23vh, 210px);
 
   resize: none;
 
@@ -1386,14 +1327,21 @@ body {
   }
 
   .chess-workspace {
-    grid-template-columns:
-      minmax(0, 1fr)
-      minmax(145px, 28%);
+    display: block;
   }
 
-  .move-row {
-    grid-template-columns: 27px 1fr 1fr;
-    font-size: 12px;
+  .chess-board-container {
+    width: min(100%, 430px);
+    max-height: 46vh;
+    margin: 0 auto;
+  }
+
+  .notes-section {
+    margin-top: 12px;
+  }
+
+  .notebook-notes {
+    height: clamp(135px, 20vh, 180px);
   }
 }
 
@@ -1496,47 +1444,17 @@ body {
     max-height: none;
   }
 
+  /* Moves are hidden on mobile as well */
   .move-history-panel {
-    height: 72px;
-
-    margin-top: 10px;
-    padding: 7px 0 0;
-
-    border-left: 0;
-    border-top:
-      1px solid rgba(79, 56, 36, 0.2);
-  }
-
-  .move-history-heading {
-    display: none;
-  }
-
-  .move-history-list {
-    display: flex;
-
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .move-row {
-    flex: 0 0 auto;
-
-    display: flex;
-    gap: 7px;
-
-    border: 0;
-
-    padding: 5px 8px;
-
-    white-space: nowrap;
+    display: none !important;
   }
 
   .notes-section {
-    margin-top: 6px;
+    margin-top: 10px;
   }
 
   .notebook-notes {
-    height: 74px;
+    height: clamp(105px, 17vh, 150px);
 
     font-size: 13px;
     line-height: 24px;
@@ -1592,7 +1510,7 @@ body {
   }
 
   .notebook-notes {
-    height: 63px;
+    height: 100px;
   }
 }
 
@@ -1609,4 +1527,4 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-  }
+}
