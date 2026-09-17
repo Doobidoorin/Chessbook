@@ -2,363 +2,60 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  >
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chessbook</title>
-
   <link rel="stylesheet" href="style.css">
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/www/css/chessboard-1.0.0.min.css">
 </head>
-
 <body>
-
   <div class="book-app" id="book-app">
-
-    <!-- COVER -->
-    <section
-      class="book-cover screen"
-      id="book-cover"
-      aria-label="Chessbook cover"
-    >
-
+    <section class="book-cover screen" id="book-cover" aria-label="Chessbook cover">
       <div class="cover-spine">
-        <div class="spine-ring ring-1"></div>
-        <div class="spine-ring ring-2"></div>
-        <div class="spine-ring ring-3"></div>
-        <div class="spine-ring ring-4"></div>
+        <div class="spine-ring ring-1"></div><div class="spine-ring ring-2"></div>
+        <div class="spine-ring ring-3"></div><div class="spine-ring ring-4"></div>
         <div class="spine-ring ring-5"></div>
       </div>
-
       <div class="cover-top-detail"></div>
-
-      <div class="cover-frame">
-
-        <div class="cover-inner-border">
-
-          <div class="cover-content">
-
-            <div class="brand-mark">
-              <span>CHESS</span>
-              <span>NOTEBOOK</span>
-            </div>
-
-            <h1 class="cover-title">
-              𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴
-            </h1>
-
-            <div class="cover-rule"></div>
-
-            <p class="cover-subtitle">
-              Note your moves
-            </p>
-
-          </div>
-
-        </div>
-
-      </div>
-
+      <div class="cover-frame"><div class="cover-inner-border"><div class="cover-content">
+        <div class="brand-mark"><span>CHESS</span><span>NOTEBOOK</span></div>
+        <h1 class="cover-title">𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</h1>
+        <div class="cover-rule"></div>
+        <p class="cover-subtitle">Note your moves</p>
+      </div></div></div>
       <div class="cover-bottom-detail"></div>
-
-      <div class="cover-open-hint">
-        <span>Open notebook</span>
-      </div>
-
+      <div class="cover-open-hint"><span>Open notebook</span></div>
     </section>
 
-
-    <!-- BOOK STAGE -->
-    <section
-      class="book-stage screen hidden"
-      id="book-stage"
-      aria-label="Chessbook"
-    >
-
+    <section class="book-stage screen hidden" id="book-stage" aria-label="Chessbook">
       <div class="book-shadow"></div>
-
-      <div
-        class="book"
-        id="book"
-        data-page="contents"
-      >
-
-        <!-- CONTENTS -->
-        <article
-          class="book-page contents-page"
-          id="contents-page"
-          data-page-type="contents"
-        >
-
-          <div class="page-binding-shadow"></div>
-
-          <div class="page-paper">
-
-            <header class="contents-header">
-
-              <div class="page-heading-decoration">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-
-              <h1>𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼</h1>
-
-              <button
-                class="icon-button search-button"
-                id="contents-search"
-                type="button"
-                aria-label="Search contents"
-              >
-                <span class="search-icon"></span>
-              </button>
-
-            </header>
-
-            <div
-              class="contents-list"
-              id="contents-list"
-              aria-live="polite"
-            >
-              <!-- Functionality goes here -->
-            </div>
-
-            <div
-              class="contents-empty-state"
-              id="contents-empty-state"
-            >
-              <span class="empty-line"></span>
-              <span class="empty-line"></span>
-              <span class="empty-line"></span>
-            </div>
-
-            <div class="page-corner"></div>
-
-            <div class="page-number contents-page-number">
-              <span>i</span>
-            </div>
-
+      <div class="book" id="book" data-page="contents">
+        <article class="book-page contents-page" id="contents-page" data-page-type="contents">
+          <div class="page-binding-shadow"></div><div class="page-paper">
+            <header class="contents-header"><div class="page-heading-decoration"><span></span><span></span><span></span></div><h1>𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼</h1><button class="icon-button search-button" id="contents-search" type="button" aria-label="Search contents"><span class="search-icon"></span></button></header>
+            <div class="contents-list" id="contents-list" aria-live="polite"></div>
+            <div class="contents-empty-state" id="contents-empty-state"><span class="empty-line"></span><span class="empty-line"></span><span class="empty-line"></span></div>
+            <div class="page-corner"></div><div class="page-number contents-page-number"><span>i</span></div>
           </div>
-
         </article>
 
-
-        <!-- NOTEBOOK PAGE -->
-        <article
-          class="book-page notebook-page"
-          id="notebook-page"
-          data-page-type="notebook"
-        >
-
-          <div class="page-binding-shadow"></div>
-
-          <div class="page-paper notebook-paper">
-
-            <header class="notebook-header">
-
-              <button
-                class="page-back-button"
-                id="back-to-contents"
-                type="button"
-                aria-label="Back to contents"
-              >
-                <span class="back-arrow"></span>
-              </button>
-
-              <div class="title-area">
-
-                <input
-                  id="notebook-title"
-                  class="notebook-title"
-                  type="text"
-                  maxlength="120"
-                  placeholder="Page title"
-                  autocomplete="off"
-                >
-
-                <div class="title-underline"></div>
-
-              </div>
-
-              <div class="notebook-header-spacer"></div>
-
-            </header>
-
-
-            <!-- CHESS DEVELOPMENT -->
-            <section
-              class="chess-section"
-              id="chess-section"
-              aria-label="Chess development"
-            >
-
-              <div class="section-label">
-                <span class="label-line"></span>
-                <span>Development</span>
-                <span class="label-line"></span>
-              </div>
-
-              <div class="chess-workspace">
-
-                <div
-                  class="chess-board-container"
-                  id="chess-board-container"
-                >
-
-                  <div class="board-placeholder">
-
-                    <div class="placeholder-board">
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                      <span></span><span></span><span></span><span></span>
-                      <span></span><span></span><span></span><span></span>
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-
-                <aside
-                  class="move-history-panel"
-                  id="move-history-panel"
-                  aria-label="Move history"
-                >
-
-                  <div class="move-history-heading">
-                    Moves
-                  </div>
-
-                  <div
-                    class="move-history-list"
-                    id="move-history-list"
-                  >
-                    <!-- Functionality goes here -->
-                  </div>
-
-                </aside>
-
-              </div>
-
-            </section>
-
-
-            <!-- NOTES -->
-            <section
-              class="notes-section"
-              id="notes-section"
-            >
-
-              <div class="section-label notes-label">
-                <span class="label-line"></span>
-                <span>Notes</span>
-                <span class="label-line"></span>
-              </div>
-
-              <textarea
-                id="notebook-notes"
-                class="notebook-notes"
-                maxlength="10000"
-                placeholder="Write your notes here..."
-              ></textarea>
-
-            </section>
-
-
-            <footer class="notebook-footer">
-
-              <span class="footer-mark">
-                𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴
-              </span>
-
-              <span
-                class="page-number"
-                id="notebook-page-number"
-              >
-                1
-              </span>
-
-            </footer>
-
-            <div class="page-corner"></div>
-
+        <article class="book-page notebook-page" id="notebook-page" data-page-type="notebook">
+          <div class="page-binding-shadow"></div><div class="page-paper notebook-paper">
+            <header class="notebook-header"><button class="page-back-button" id="back-to-contents" type="button" aria-label="Back to contents"><span class="back-arrow"></span></button><div class="title-area"><input id="notebook-title" class="notebook-title" type="text" maxlength="120" placeholder="Page title" autocomplete="off"><div class="title-underline"></div></div><div class="notebook-header-spacer"></div></header>
+            <section class="chess-section" id="chess-section" aria-label="Chess development"><div class="section-label"><span class="label-line"></span><span>Development</span><span class="label-line"></span></div><div class="chess-workspace"><div class="chess-board-container" id="chess-board-container"><div id="chessboard" class="chessboard" aria-label="Chessboard"></div></div><aside class="move-history-panel" id="move-history-panel" aria-label="Move history"><div class="move-history-heading">Moves</div><div class="move-history-list" id="move-history-list"></div></aside></div></section>
+            <section class="notes-section" id="notes-section"><div class="section-label notes-label"><span class="label-line"></span><span>Notes</span><span class="label-line"></span></div><textarea id="notebook-notes" class="notebook-notes" maxlength="10000" placeholder="Write your notes here..."></textarea></section>
+            <footer class="notebook-footer"><span class="footer-mark">𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</span><span class="page-number" id="notebook-page-number">1</span></footer><div class="page-corner"></div>
           </div>
-
         </article>
-
-
-        <!-- PAGE TURNING -->
-        <div
-          class="page-turn-layer"
-          id="page-turn-layer"
-          aria-hidden="true"
-        >
-          <div class="page-turn-shadow"></div>
-        </div>
-
+        <div class="page-turn-layer" id="page-turn-layer" aria-hidden="true"><div class="page-turn-shadow"></div></div>
       </div>
-
-
-      <!-- NAVIGATION -->
-      <nav
-        class="book-navigation"
-        id="book-navigation"
-        aria-label="Notebook navigation"
-      >
-
-        <button
-          class="book-nav-button"
-          id="previous-page"
-          type="button"
-          aria-label="Previous page"
-        >
-          <span class="nav-arrow left-arrow"></span>
-        </button>
-
-        <div class="book-page-indicator">
-          <span id="current-page-number">Contents</span>
-        </div>
-
-        <button
-          class="book-nav-button"
-          id="next-page"
-          type="button"
-          aria-label="Next page"
-        >
-          <span class="nav-arrow right-arrow"></span>
-        </button>
-
-      </nav>
-
+      <nav class="book-navigation" id="book-navigation" aria-label="Notebook navigation"><button class="book-nav-button" id="previous-page" type="button" aria-label="Previous page"><span class="nav-arrow left-arrow"></span></button><div class="book-page-indicator"><span id="current-page-number">Contents</span></div><button class="book-nav-button" id="next-page" type="button" aria-label="Next page"><span class="nav-arrow right-arrow"></span></button></nav>
     </section>
-
   </div>
 
+  <!-- These are deliberately loaded in dependency order. chess.js 0.10.3 exposes the global Chess constructor. -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/www/js/chessboard-1.0.0.min.js"></script>
   <script src="app.js"></script>
-
 </body>
 </html>
