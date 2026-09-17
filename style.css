@@ -138,5 +138,53 @@ body {
   letter-spacing: 0.16em;
   -webkit-text-stroke: 1px #7a2333;
 }
+.contents-page {
+  min-height: 100vh;
+  padding: 70px 8vw;
+  background: #f3e7d2;
+  color: #140c0e;
+  font-family: Georgia, serif;
+}
 
+.contents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #7a2333;
+  padding-bottom: 18px;
+}
+
+.contents-header h1 {
+  margin: 0;
+  color: #7a2333;
+  font-size: clamp(2.8rem, 7vw, 5rem);
+  font-weight: 400;
+}
+
+.search-button {
+  background: none;
+  border: none;
+  color: #7a2333;
+  font-size: 2rem;
+  cursor: pointer;
+}
+
+.contents-list {
+  margin-top: 45px;
+}
+
+.contents-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 5px;
+  border-bottom: 1px solid rgba(122, 35, 51, 0.35);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.contents-entry span:last-child {
+  min-width: 30px;
+  text-align: right;
+}
 
