@@ -1,83 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Chessbook</title>
-
-  <link rel="stylesheet" href="style.css">
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chessbook</title>
+<link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-  
-  <main class="book-cover" id="book-cover">
 
-    <div class="cover-band top-band"></div>
+<div id="app">
 
-    <section class="cover-content">
-      <div class="title-plaque">
-        <h1>𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</h1>
-      </div>
-
-      <p>Note your moves</p>
-    </section>
-
-    <div class="cover-band bottom-band"></div>
-
-  </main>
-
-  <main class="contents-page" id="contents-page">
-
-    <div class="contents-header">
-      <h1>𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼</h1>
-
-      <button
-        class="search-button"
-        id="search-button"
-        aria-label="Search"
-        type="button"
-      >
-        ⌕
-      </button>
+  <div id="cover" class="cover">
+    <div class="cover-inner">
+      <div class="cover-title">𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</div>
+      <div class="cover-subtitle">Note your moves</div>
     </div>
+  </div>
 
-    <div class="contents-list" id="contents-list">
-
+  <div id="authModal" class="auth-modal hidden">
+    <div class="auth-box">
+      <h2 id="authTitle">Sign in</h2>
+      <input type="text" id="authUsername" placeholder="Username" autocomplete="username">
+      <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+      <div id="authError" class="auth-error"></div>
+      <button id="authSubmit">Sign in</button>
+      <button id="authToggle" class="auth-link" type="button">Need an account? Create one</button>
     </div>
+  </div>
 
-  </main>
-
-  <main class="notebook-page" id="notebook-page">
-
-    <div class="page-header">
-      <input
-        type="text"
-        id="page-title"
-        placeholder="Page title"
-        maxlength="100"
-      >
+  <div id="book" class="book hidden">
+    <div id="stage" class="stage">
+      <div id="pageBehind" class="page-leaf page-behind"></div>
+      <div id="pageCurrent" class="page-leaf page-current"></div>
+      <div id="edgePrev" class="edge edge-prev"></div>
+      <div id="edgeNext" class="edge edge-next"></div>
     </div>
+  </div>
 
-    <div class="chessboard-container" id="chessboard-container">
- 
-    </div>
+</div>
 
-    <textarea
-      id="page-notes"
-      placeholder="Write your notes..."
-    ></textarea>
-
-    <div class="page-number" id="page-number">
-      1
-    </div>
-
-  </main>
-
-
-  <script src="app.js"></script>
-
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://unpkg.com/chess.js@0.13.4/chess.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
