@@ -1,684 +1,2725 @@
 "use strict";
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-const SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+
+/*
+  ============================================================
+  CHESSBOOK
+  Plain browser JavaScript
+  No import
+  No export
+  No build system required
+  ============================================================
+*/
+
+
+/* ============================================================
+   1. SUPABASE CONFIGURATION
+============================================================ */
+
+/*
+  IMPORTANT:
+
+  Put your EXISTING Supabase project values here.
+
+  Never put your Supabase service-role key here.
+
+  The publishable/anon key is the frontend key intended
+  for this type of application.
+*/
+
+const SUPABASE_URL = "YOUR_EXISTING_SUPABASE_URL";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR_EXISTING_SUPABASE_PUBLISHABLE_KEY";
+
 const AUTH_EMAIL_DOMAIN = "chessbook.local";
 
 const WORDS_PER_PAGE = 80;
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+/* ============================================================
+   2. GLOBAL STATE
+============================================================ */
 
 const state = {
+
   session: null,
-  entries: [], 
-  book: [], 
-  slotIndex: 0, 
+
+  entries: [],
+
+  book: [],
+
+  slotIndex: 0,
+
   chess: {
     game: null,
-    sanMoves: [], 
+    sanMoves: [],
     currentPly: 0,
     selectedSquare: null,
-    legalTargets: [],
-  },
+    legalTargets: []
+  }
+
 };
 
-let saveTimer = null;
+let saveTimers = new Map();
 
-const el = {
-  cover: document.getElementById("cover"),
-  book: document.getElementById("book"),
-  stage: document.getElementById("stage"),
-  pageCurrent: document.getElementById("pageCurrent"),
-  pageBehind: document.getElementById("pageBehind"),
-  edgePrev: document.getElementById("edgePrev"),
-  edgeNext: document.getElementById("edgeNext"),
-  authModal: document.getElementById("authModal"),
-  authTitle: document.getElementById("authTitle"),
-  authUsername: document.getElementById("authUsername"),
-  authPassword: document.getElementById("authPassword"),
-  authError: document.getElementById("authError"),
-  authSubmit: document.getElementById("authSubmit"),
-  authToggle: document.getElementById("authToggle"),
-};
+let drag = null;
+
+let isTurning = false;
+
+
+/* ============================================================
+   3. START APPLICATION AFTER DOM EXISTS
+============================================================ */
+
+document.addEventListener("DOMContentLoaded", () => {
+
+  init();
+
+});
+
+
+/* ============================================================
+   4. DOM REFERENCES
+============================================================ */
+
+function getElements() {
+
+  return {
+
+    cover: document.getElementById("cover"),
+
+    book: document.getElementById("book"),
+
+    stage: document.getElementById("stage"),
+
+    pageCurrent: document.getElementById("pageCurrent"),
+
+    pageBehind: document.getElementById("pageBehind"),
+
+    edgePrev: document.getElementById("edgePrev"),
+
+    edgeNext: document.getElementById("edgeNext"),
+
+    authModal: document.getElementById("authModal"),
+
+    authClose: document.getElementById("authClose"),
+
+    authTitle: document.getElementById("authTitle"),
+
+    authDescription: document.getElementById("authDescription"),
+
+    authUsername: document.getElementById("authUsername"),
+
+    authPassword: document.getElementById("authPassword"),
+
+    authError: document.getElementById("authError"),
+
+    authSubmit: document.getElementById("authSubmit"),
+
+    authToggle: document.getElementById("authToggle")
+
+  };
+
+}
+
+
+let el = null;
 
 let authMode = "signin";
 
-function usernameToEmail(username) {
-  return `${username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "")}@${AUTH_EMAIL_DOMAIN}`;
+
+/* ============================================================
+   5. INITIALIZATION
+============================================================ */
+
+async function init() {
+
+  el = getElements();
+
+  if (!el.cover || !el.book || !el.stage || !el.pageCurrent) {
+
+    console.error("Chessbook could not find the required page elements.");
+
+    return;
+
+  }
+
+
+  /*
+    Make sure Supabase loaded.
+  */
+
+  if (!window.supabase || typeof window.supabase.createClient !== "function") {
+
+    console.error("Supabase library failed to load.");
+
+    return;
+
+  }
+
+
+  /*
+    Make sure Chess.js loaded.
+  */
+
+  if (typeof window.Chess !== "function") {
+
+    console.error("Chess.js failed to load.");
+
+    return;
+
+  }
+
+
+  setupSupabase();
+
+  setupAuth();
+
+  setupCover();
+
+  setupPageTurning();
+
+  await restoreSession();
+
 }
+
+
+/* ============================================================
+   6. SUPABASE
+============================================================ */
+
+let sb = null;
+
+
+function setupSupabase() {
+
+  if (
+    !SUPABASE_URL ||
+    !SUPABASE_PUBLISHABLE_KEY ||
+    SUPABASE_URL.includes("YOUR_EXISTING") ||
+    SUPABASE_PUBLISHABLE_KEY.includes("YOUR_EXISTING")
+  ) {
+
+    console.warn(
+      "Chessbook Supabase configuration still contains placeholders."
+    );
+
+    return;
+
+  }
+
+
+  try {
+
+    sb = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+
+  } catch (error) {
+
+    console.error("Could not initialize Supabase:", error);
+
+  }
+
+}
+
+
+/* ============================================================
+   7. SESSION
+============================================================ */
+
+async function restoreSession() {
+
+  if (!sb) {
+    return;
+  }
+
+  try {
+
+    const result = await sb.auth.getSession();
+
+    if (result.error) {
+      console.error(result.error);
+      return;
+    }
+
+    state.session = result.data.session;
+
+  } catch (error) {
+
+    console.error("Session restore failed:", error);
+
+  }
+
+}
+
+
+/* ============================================================
+   8. AUTHENTICATION
+============================================================ */
+
+function setupAuth() {
+
+  el.authToggle.addEventListener("click", toggleAuthMode);
+
+  el.authSubmit.addEventListener("click", submitAuth);
+
+  el.authClose.addEventListener("click", closeAuth);
+
+
+  el.authUsername.addEventListener("keydown", (event) => {
+
+    if (event.key === "Enter") {
+
+      el.authPassword.focus();
+
+    }
+
+  });
+
+
+  el.authPassword.addEventListener("keydown", (event) => {
+
+    if (event.key === "Enter") {
+
+      submitAuth();
+
+    }
+
+  });
+
+}
+
+
+function usernameToEmail(username) {
+
+  const cleaned = username
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, "");
+
+  return `${cleaned}@${AUTH_EMAIL_DOMAIN}`;
+
+}
+
 
 function openAuth() {
+
   el.authModal.classList.remove("hidden");
+
   el.authError.textContent = "";
+
+  setTimeout(() => {
+
+    el.authUsername.focus();
+
+  }, 50);
+
 }
+
 
 function closeAuth() {
+
   el.authModal.classList.add("hidden");
+
+  el.authError.textContent = "";
+
 }
 
-el.authToggle.addEventListener("click", () => {
-  authMode = authMode === "signin" ? "signup" : "signin";
-  el.authTitle.textContent = authMode === "signin" ? "Sign in" : "Create your Chessbook";
-  el.authSubmit.textContent = authMode === "signin" ? "Sign in" : "Create account";
-  el.authToggle.textContent = authMode === "signin" ? "Need an account? Create one" : "Already have an account? Sign in";
-  el.authError.textContent = "";
-});
 
-el.authSubmit.addEventListener("click", async () => {
-  const username = el.authUsername.value.trim();
-  const password = el.authPassword.value;
-  if (!username || !password) {
-    el.authError.textContent = "Enter a username and password.";
-    return;
+function toggleAuthMode() {
+
+  if (authMode === "signin") {
+
+    authMode = "signup";
+
+    el.authTitle.textContent = "Create your Chessbook";
+
+    el.authDescription.textContent =
+      "Create an account to save your notebook.";
+
+    el.authSubmit.textContent = "Create account";
+
+    el.authToggle.textContent =
+      "Already have an account? Sign in";
+
+  } else {
+
+    authMode = "signin";
+
+    el.authTitle.textContent = "Sign in";
+
+    el.authDescription.textContent =
+      "Sign in to continue to your notebook.";
+
+    el.authSubmit.textContent = "Sign in";
+
+    el.authToggle.textContent =
+      "Need an account? Create one";
+
   }
+
+  el.authError.textContent = "";
+
+}
+
+
+async function submitAuth() {
+
+  if (!sb) {
+
+    el.authError.textContent =
+      "Supabase is not configured yet.";
+
+    return;
+
+  }
+
+
+  const username = el.authUsername.value.trim();
+
+  const password = el.authPassword.value;
+
+
+  if (!username || !password) {
+
+    el.authError.textContent =
+      "Enter a username and password.";
+
+    return;
+
+  }
+
+
   const email = usernameToEmail(username);
+
+
+  if (!email || email === `@${AUTH_EMAIL_DOMAIN}`) {
+
+    el.authError.textContent =
+      "Enter a valid username.";
+
+    return;
+
+  }
+
+
   el.authSubmit.disabled = true;
+
+  el.authError.textContent = "";
+
+
   try {
+
     if (authMode === "signin") {
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      state.session = data.session;
+
+      const result = await sb.auth.signInWithPassword({
+
+        email,
+        password
+
+      });
+
+
+      if (result.error) {
+        throw result.error;
+      }
+
+
+      state.session = result.data.session;
+
+
     } else {
-      const { data, error } = await sb.auth.signUp({
+
+      const result = await sb.auth.signUp({
+
         email,
         password,
-        options: { data: { username } },
-      });
-      if (error) throw error;
-      state.session = data.session;
-    }
-    closeAuth();
-    await enterBook();
-  } catch (err) {
-    el.authError.textContent = humanizeAuthError(err);
-  } finally {
-    el.authSubmit.disabled = false;
-  }
-});
 
-function humanizeAuthError(err) {
-  const msg = (err && err.message) || "Something went wrong.";
-  if (/already registered|already exists/i.test(msg)) return "That username is taken.";
-  if (/invalid login credentials/i.test(msg)) return "Wrong username or password.";
-  return msg;
+        options: {
+
+          data: {
+            username
+          }
+
+        }
+
+      });
+
+
+      if (result.error) {
+        throw result.error;
+      }
+
+
+      state.session = result.data.session;
+
+
+      /*
+        Confirm-email is expected to be disabled in the
+        existing project as previously configured.
+      */
+
+      if (!state.session) {
+
+        el.authError.textContent =
+          "Account created. Sign in to continue.";
+
+        authMode = "signin";
+
+        el.authTitle.textContent = "Sign in";
+
+        el.authDescription.textContent =
+          "Sign in to continue to your notebook.";
+
+        el.authSubmit.textContent = "Sign in";
+
+        el.authToggle.textContent =
+          "Need an account? Create one";
+
+        return;
+
+      }
+
+    }
+
+
+    closeAuth();
+
+    await openBook();
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    el.authError.textContent =
+      humanizeAuthError(error);
+
+  } finally {
+
+    el.authSubmit.disabled = false;
+
+  }
+
 }
 
-el.cover.addEventListener("click", async () => {
-  const { data } = await sb.auth.getSession();
-  state.session = data.session;
-  if (!state.session) {
-    openAuth();
+
+function humanizeAuthError(error) {
+
+  const message =
+    error && error.message
+      ? error.message
+      : "Something went wrong.";
+
+
+  if (/invalid login credentials/i.test(message)) {
+
+    return "Wrong username or password.";
+
+  }
+
+
+  if (
+    /already registered/i.test(message) ||
+    /already exists/i.test(message)
+  ) {
+
+    return "That username is already taken.";
+
+  }
+
+
+  if (/password should be at least/i.test(message)) {
+
+    return message;
+
+  }
+
+
+  return message;
+
+}
+
+
+/* ============================================================
+   9. COVER
+============================================================ */
+
+function setupCover() {
+
+  el.cover.addEventListener("click", async () => {
+
+    /*
+      If already signed in, immediately open.
+    */
+
+    if (state.session) {
+
+      await openBook();
+
+      return;
+
+    }
+
+
+    /*
+      Check current session one more time.
+    */
+
+    if (sb) {
+
+      try {
+
+        const result = await sb.auth.getSession();
+
+        state.session = result.data.session;
+
+      } catch (error) {
+
+        console.error(error);
+
+      }
+
+    }
+
+
+    if (state.session) {
+
+      await openBook();
+
+    } else {
+
+      /*
+        Open authentication.
+      */
+
+      openAuth();
+
+    }
+
+  });
+
+}
+
+
+/* ============================================================
+   10. OPEN BOOK
+============================================================ */
+
+async function openBook() {
+
+  if (isTurning) {
     return;
   }
-  await enterBook();
-});
 
-async function enterBook() {
-  el.cover.classList.add("cover-open");
+
+  if (!state.session) {
+
+    openAuth();
+
+    return;
+
+  }
+
+
+  /*
+    Load notebook data before displaying Contents.
+  */
+
   await loadEntries();
-  state.slotIndex = 0; 
+
+
+  /*
+    Always begin at Contents.
+  */
+
+  state.slotIndex = 0;
+
+
+  /*
+    Prepare the book.
+  */
+
+  renderCurrentSlot();
+
+
+  el.book.classList.remove("hidden");
+
+
+  /*
+    Allow the browser to paint the book first.
+  */
+
+  requestAnimationFrame(() => {
+
+    requestAnimationFrame(() => {
+
+      el.cover.classList.add("cover-opening");
+
+    });
+
+  });
+
+
+  /*
+    Completely remove the cover after animation.
+  */
+
   setTimeout(() => {
+
     el.cover.classList.add("hidden");
-    el.book.classList.remove("hidden");
-    renderCurrentSlot();
-  }, 500);
+
+  }, 750);
+
 }
+
+
+/* ============================================================
+   11. LOAD NOTEBOOK ENTRIES
+============================================================ */
 
 async function loadEntries() {
-  const { data, error } = await sb
-    .from("notebook_pages")
-    .select("*")
-    .order("page_number", { ascending: true });
-  if (error) {
-    console.error(error);
+
+  if (!sb || !state.session) {
+
     state.entries = [];
-  } else {
-    state.entries = (data || []).filter((r) => r.title && r.title.trim().length > 0);
+
+    state.book = buildBook([]);
+
+    return;
+
   }
+
+
+  try {
+
+    const result = await sb
+      .from("notebook_pages")
+      .select("*")
+      .eq("user_id", state.session.user.id)
+      .order("page_number", {
+        ascending: true
+      });
+
+
+    if (result.error) {
+
+      console.error("Could not load notebook pages:", result.error);
+
+      state.entries = [];
+
+    } else {
+
+      state.entries = (result.data || [])
+        .filter((row) => {
+
+          return (
+            typeof row.title === "string" &&
+            row.title.trim().length > 0
+          );
+
+        });
+
+    }
+
+  } catch (error) {
+
+    console.error("Notebook loading failed:", error);
+
+    state.entries = [];
+
+  }
+
+
   state.book = buildBook(state.entries);
+
 }
+
+
+/* ============================================================
+   12. PAGINATION
+============================================================ */
 
 function paginateNotes(text, wordsPerPage) {
-  const words = (text || "").trim().length ? text.trim().split(/\s+/) : [];
-  if (words.length === 0) return [""];
-  const pages = [];
-  for (let i = 0; i < words.length; i += wordsPerPage) {
-    pages.push(words.slice(i, i + wordsPerPage).join(" "));
+
+  const cleanText = (text || "").trim();
+
+
+  if (!cleanText) {
+
+    return [""];
+
   }
+
+
+  const words = cleanText.split(/\s+/);
+
+  const pages = [];
+
+
+  for (
+    let index = 0;
+    index < words.length;
+    index += wordsPerPage
+  ) {
+
+    pages.push(
+      words
+        .slice(index, index + wordsPerPage)
+        .join(" ")
+    );
+
+  }
+
+
   return pages;
+
 }
+
+
+/* ============================================================
+   13. BUILD PHYSICAL BOOK
+============================================================ */
 
 function buildBook(entries) {
-  const slots = [{ type: "contents" }];
-  for (let idx = 0; idx < entries.length; idx++) {
-    const entry = entries[idx];
-    slots.push({ type: "entry", entry });
 
-    const notesPages = paginateNotes(entry.notes, WORDS_PER_PAGE);
-    let contCount = notesPages.length - 1;
-    const nextEntry = entries[idx + 1];
-    let capped = false;
-    if (nextEntry) {
-      const maxAllowed = Math.max(0, nextEntry.page_number - entry.page_number - 1);
-      if (contCount > maxAllowed) {
-        contCount = maxAllowed;
-        capped = true;
-      }
+  const slots = [
+
+    {
+      type: "contents"
     }
-    for (let c = 1; c <= contCount; c++) {
-      const isLast = c === contCount;
-      const text = isLast && capped ? notesPages.slice(c).join(" ") : notesPages[c];
+
+  ];
+
+
+  for (let index = 0; index < entries.length; index++) {
+
+    const entry = entries[index];
+
+
+    /*
+      Main chess page.
+    */
+
+    slots.push({
+
+      type: "entry",
+
+      entry
+
+    });
+
+
+    /*
+      Notes continuation.
+    */
+
+    const notePages =
+      paginateNotes(
+        entry.notes,
+        WORDS_PER_PAGE
+      );
+
+
+    for (
+      let pageIndex = 1;
+      pageIndex < notePages.length;
+      pageIndex++
+    ) {
+
       slots.push({
+
         type: "continuation",
+
         entry,
-        pageNumber: entry.page_number + c,
-        text,
+
+        pageNumber:
+          Number(entry.page_number) + pageIndex,
+
+        text:
+          notePages[pageIndex]
+
       });
+
     }
+
   }
-  const last = entries[entries.length - 1];
+
+
+  /*
+    New entry page.
+
+    For an empty notebook this becomes the page after
+    Contents.
+
+    For an existing notebook it appears after the last
+    physical entry and its continuation pages.
+  */
+
   let newPageNumber = 1;
-  if (last) {
-    const notesPages = paginateNotes(last.notes, WORDS_PER_PAGE);
-    newPageNumber = last.page_number + notesPages.length; 
+
+
+  if (entries.length > 0) {
+
+    const lastEntry =
+      entries[entries.length - 1];
+
+
+    const notePages =
+      paginateNotes(
+        lastEntry.notes,
+        WORDS_PER_PAGE
+      );
+
+
+    newPageNumber =
+      Number(lastEntry.page_number) +
+      notePages.length;
+
   }
-  slots.push({ type: "new", pageNumber: newPageNumber });
+
+
+  slots.push({
+
+    type: "new",
+
+    pageNumber: newPageNumber
+
+  });
+
+
   return slots;
+
 }
 
-function parseMoves(movesField) {
-  if (!movesField) return [];
-  if (Array.isArray(movesField)) return movesField;
-  try {
-    const parsed = JSON.parse(movesField);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
-}
 
-function gameAtPly(sanMoves, ply) {
-  const game = new Chess();
-  for (let i = 0; i < ply; i++) {
-    game.move(sanMoves[i]);
-  }
-  return game;
-}
+/* ============================================================
+   14. RENDER CURRENT PAGE
+============================================================ */
 
 function renderCurrentSlot() {
-  const slot = state.book[state.slotIndex];
+
+  const slot =
+    state.book[state.slotIndex];
+
+
+  if (!slot) {
+    return;
+  }
+
+
   el.pageCurrent.innerHTML = "";
-  el.pageCurrent.classList.remove("page-contents");
-  if (!slot) return;
+
+  el.pageCurrent.className =
+    "page-leaf page-current";
+
 
   if (slot.type === "contents") {
+
     el.pageCurrent.classList.add("page-contents");
-    renderContentsPage(el.pageCurrent);
-  } else if (slot.type === "entry") {
-    renderEntryPage(el.pageCurrent, slot.entry);
-  } else if (slot.type === "continuation") {
-    renderContinuationPage(el.pageCurrent, slot);
-  } else if (slot.type === "new") {
-    renderNewPage(el.pageCurrent, slot);
+
+    renderContentsPage(
+      el.pageCurrent
+    );
+
   }
 
-  updateEdgeVisibility();
+
+  else if (slot.type === "entry") {
+
+    renderEntryPage(
+      el.pageCurrent,
+      slot.entry
+    );
+
+  }
+
+
+  else if (slot.type === "continuation") {
+
+    renderContinuationPage(
+      el.pageCurrent,
+      slot
+    );
+
+  }
+
+
+  else if (slot.type === "new") {
+
+    renderNewPage(
+      el.pageCurrent,
+      slot
+    );
+
+  }
+
+
+  renderBehindPage();
+
 }
 
-function updateEdgeVisibility() {
-  el.edgePrev.classList.toggle("edge-disabled", state.slotIndex <= 0);
-  el.edgeNext.classList.toggle("edge-disabled", false); 
+
+/* ============================================================
+   15. RENDER PAGE BEHIND CURRENT PAGE
+============================================================ */
+
+function renderBehindPage() {
+
+  const nextIndex =
+    state.slotIndex + 1;
+
+
+  const previousIndex =
+    state.slotIndex - 1;
+
+
+  /*
+    During a forward turn, the page behind should be the
+    next page.
+
+    During a backward turn, the same area is refreshed
+    when needed.
+  */
+
+  const nextSlot =
+    state.book[nextIndex];
+
+
+  el.pageBehind.innerHTML = "";
+
+  el.pageBehind.className =
+    "page-leaf page-behind";
+
+
+  if (!nextSlot) {
+    return;
+  }
+
+
+  if (nextSlot.type === "contents") {
+
+    el.pageBehind.classList.add("page-contents");
+
+    renderContentsPage(
+      el.pageBehind,
+      true
+    );
+
+  }
+
+
+  else if (nextSlot.type === "entry") {
+
+    renderEntryPage(
+      el.pageBehind,
+      nextSlot.entry,
+      true
+    );
+
+  }
+
+
+  else if (nextSlot.type === "continuation") {
+
+    renderContinuationPage(
+      el.pageBehind,
+      nextSlot,
+      true
+    );
+
+  }
+
+
+  else if (nextSlot.type === "new") {
+
+    renderNewPage(
+      el.pageBehind,
+      nextSlot,
+      true
+    );
+
+  }
+
 }
 
-function renderContentsPage(container) {
-  const wrap = document.createElement("div");
-  wrap.className = "contents-page";
 
-  const header = document.createElement("div");
-  header.className = "contents-header";
-  const title = document.createElement("div");
-  title.className = "contents-title";
-  title.textContent = "𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼";
-  const searchBtn = document.createElement("button");
-  searchBtn.className = "search-btn";
-  searchBtn.setAttribute("aria-label", "Search");
-  searchBtn.innerHTML = "&#128269;";
+/* ============================================================
+   16. CONTENTS PAGE
+============================================================ */
+
+function renderContentsPage(container, preview = false) {
+
+  const wrap =
+    document.createElement("div");
+
+  wrap.className =
+    "contents-page";
+
+
+  const header =
+    document.createElement("div");
+
+  header.className =
+    "contents-header";
+
+
+  const title =
+    document.createElement("div");
+
+  title.className =
+    "contents-title";
+
+  title.textContent =
+    "𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼";
+
+
+  const searchButton =
+    document.createElement("button");
+
+  searchButton.type = "button";
+
+  searchButton.className =
+    "search-btn";
+
+  searchButton.setAttribute(
+    "aria-label",
+    "Search"
+  );
+
+  searchButton.textContent = "⌕";
+
+
   header.appendChild(title);
-  header.appendChild(searchBtn);
+
+  header.appendChild(searchButton);
+
   wrap.appendChild(header);
 
-  const searchBar = document.createElement("div");
-  searchBar.className = "search-bar hidden";
-  const searchInput = document.createElement("input");
+
+  /*
+    Search.
+  */
+
+  const searchBar =
+    document.createElement("div");
+
+  searchBar.className =
+    "search-bar hidden";
+
+
+  const searchInput =
+    document.createElement("input");
+
   searchInput.type = "text";
-  searchInput.placeholder = "Search titles and notes";
+
+  searchInput.placeholder =
+    "Search titles and notes";
+
+  searchInput.autocomplete =
+    "off";
+
+
   searchBar.appendChild(searchInput);
+
   wrap.appendChild(searchBar);
 
-  const list = document.createElement("div");
-  list.className = "contents-list";
+
+  /*
+    Contents list.
+  */
+
+  const list =
+    document.createElement("div");
+
+  list.className =
+    "contents-list";
+
+
   wrap.appendChild(list);
 
-  function renderList(items) {
-    list.innerHTML = "";
-    if (items.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "contents-empty";
-      empty.textContent = searchInput.value ? "No matches." : "";
-      list.appendChild(empty);
-      return;
-    }
-    items.forEach((entry) => {
-      const row = document.createElement("div");
-      row.className = "contents-row";
-      const t = document.createElement("span");
-      t.className = "contents-row-title";
-      t.textContent = entry.title;
-      const p = document.createElement("span");
-      p.className = "contents-row-page";
-      p.textContent = entry.page_number;
-      row.appendChild(t);
-      row.appendChild(p);
-      row.addEventListener("click", () => {
-        const idx = state.book.findIndex((s) => s.type === "entry" && s.entry.id === entry.id);
-        if (idx >= 0) {
-          state.slotIndex = idx;
-          renderCurrentSlot();
-        }
-      });
-      list.appendChild(row);
-    });
+
+  function getEntries() {
+
+    return state.entries
+      .slice()
+      .sort(
+        (a, b) =>
+          Number(a.page_number) -
+          Number(b.page_number)
+      );
+
   }
 
-  renderList(state.entries.slice().sort((a, b) => a.page_number - b.page_number));
 
-  searchBtn.addEventListener("click", () => {
-    searchBar.classList.toggle("hidden");
-    if (!searchBar.classList.contains("hidden")) searchInput.focus();
-  });
+  function renderList(items) {
 
-  searchInput.addEventListener("input", () => {
-    const q = searchInput.value.trim().toLowerCase();
-    if (!q) {
-      renderList(state.entries.slice().sort((a, b) => a.page_number - b.page_number));
+    list.innerHTML = "";
+
+
+    if (items.length === 0) {
+
+      const empty =
+        document.createElement("div");
+
+      empty.className =
+        "contents-empty";
+
+
+      empty.textContent =
+        searchInput.value.trim()
+          ? "No matches."
+          : "Your notebook is empty.";
+
+
+      list.appendChild(empty);
+
       return;
+
     }
-    const matches = state.entries.filter(
-      (e) => (e.title || "").toLowerCase().includes(q) || (e.notes || "").toLowerCase().includes(q)
+
+
+    items.forEach((entry) => {
+
+      const row =
+        document.createElement("div");
+
+      row.className =
+        "contents-row";
+
+
+      const entryTitle =
+        document.createElement("span");
+
+      entryTitle.className =
+        "contents-row-title";
+
+      entryTitle.textContent =
+        entry.title;
+
+
+      const pageNumber =
+        document.createElement("span");
+
+      pageNumber.className =
+        "contents-row-page";
+
+      pageNumber.textContent =
+        entry.page_number;
+
+
+      row.appendChild(entryTitle);
+
+      row.appendChild(pageNumber);
+
+
+      if (!preview) {
+
+        row.addEventListener(
+          "click",
+          () => {
+
+            const targetIndex =
+              state.book.findIndex(
+                (slot) =>
+                  slot.type === "entry" &&
+                  slot.entry.id === entry.id
+              );
+
+
+            if (targetIndex < 0) {
+              return;
+            }
+
+
+            state.slotIndex =
+              targetIndex;
+
+
+            renderCurrentSlot();
+
+          }
+        );
+
+      }
+
+
+      list.appendChild(row);
+
+    });
+
+  }
+
+
+  renderList(getEntries());
+
+
+  if (!preview) {
+
+    searchButton.addEventListener(
+      "click",
+      () => {
+
+        searchBar.classList.toggle(
+          "hidden"
+        );
+
+
+        if (
+          !searchBar.classList.contains(
+            "hidden"
+          )
+        ) {
+
+          searchInput.focus();
+
+        }
+
+      }
     );
-    renderList(matches.sort((a, b) => a.page_number - b.page_number));
-  });
+
+
+    searchInput.addEventListener(
+      "input",
+      () => {
+
+        const query =
+          searchInput.value
+            .trim()
+            .toLowerCase();
+
+
+        if (!query) {
+
+          renderList(
+            getEntries()
+          );
+
+          return;
+
+        }
+
+
+        const matches =
+          state.entries.filter(
+            (entry) => {
+
+              const title =
+                (
+                  entry.title || ""
+                ).toLowerCase();
+
+
+              const notes =
+                (
+                  entry.notes || ""
+                ).toLowerCase();
+
+
+              return (
+                title.includes(query) ||
+                notes.includes(query)
+              );
+
+            }
+          );
+
+
+        renderList(
+          matches.sort(
+            (a, b) =>
+              Number(a.page_number) -
+              Number(b.page_number)
+          )
+        );
+
+      }
+    );
+
+  }
+
 
   container.appendChild(wrap);
+
 }
 
-function renderEntryPage(container, entry) {
-  const wrap = document.createElement("div");
-  wrap.className = "entry-page";
+
+/* ============================================================
+   17. ENTRY PAGE
+============================================================ */
+
+function renderEntryPage(
+  container,
+  entry,
+  preview = false
+) {
+
+  const wrap =
+    document.createElement("div");
+
+  wrap.className =
+    "entry-page";
 
 
-  const titleInput = document.createElement("input");
+  /*
+    Title.
+  */
+
+  const titleInput =
+    document.createElement("input");
+
   titleInput.type = "text";
-  titleInput.className = "entry-title no-drag";
-  titleInput.value = entry.title || "";
-  titleInput.placeholder = "Untitled";
-  titleInput.addEventListener("input", () => {
-    entry.title = titleInput.value;
-    queueSave(entry, { title: entry.title });
-  });
-  wrap.appendChild(titleInput);
 
-  // Board
-  const sanMoves = parseMoves(entry.moves);
-  state.chess.sanMoves = sanMoves.slice();
-  state.chess.currentPly = sanMoves.length;
-  state.chess.selectedSquare = null;
-  state.chess.legalTargets = [];
-  state.chess.game = gameAtPly(state.chess.sanMoves, state.chess.currentPly);
+  titleInput.className =
+    "entry-title no-drag";
 
-  const boardWrap = document.createElement("div");
-  boardWrap.className = "board-wrap no-drag";
-  const boardEl = document.createElement("div");
-  boardEl.className = "chessboard";
-  boardWrap.appendChild(boardEl);
-  wrap.appendChild(boardWrap);
+  titleInput.value =
+    entry.title || "";
 
-  // Move nav
-  const nav = document.createElement("div");
-  nav.className = "move-nav no-drag";
-  const backBtn = document.createElement("button");
-  backBtn.className = "nav-btn";
-  backBtn.textContent = "\u2190";
-  const fwdBtn = document.createElement("button");
-  fwdBtn.className = "nav-btn";
-  fwdBtn.textContent = "\u2192";
-  const plyLabel = document.createElement("span");
-  plyLabel.className = "ply-label";
-  nav.appendChild(backBtn);
-  nav.appendChild(plyLabel);
-  nav.appendChild(fwdBtn);
-  wrap.appendChild(nav);
+  titleInput.placeholder =
+    "Untitled";
 
-  function refreshBoard() {
-    drawBoard(boardEl, state.chess.game, onSquareClick);
-    plyLabel.textContent = formatMoveList(state.chess.sanMoves, state.chess.currentPly);
-    backBtn.disabled = state.chess.currentPly <= 0;
-    fwdBtn.disabled = state.chess.currentPly >= state.chess.sanMoves.length;
+
+  if (preview) {
+
+    titleInput.readOnly = true;
+
+  } else {
+
+    titleInput.addEventListener(
+      "input",
+      () => {
+
+        entry.title =
+          titleInput.value;
+
+        queueSave(
+          entry,
+          {
+            title: entry.title
+          }
+        );
+
+      }
+    );
+
   }
 
-  backBtn.addEventListener("click", () => {
-    if (state.chess.currentPly > 0) {
-      state.chess.currentPly--;
-      state.chess.game = gameAtPly(state.chess.sanMoves, state.chess.currentPly);
-      state.chess.selectedSquare = null;
-      state.chess.legalTargets = [];
-      refreshBoard();
-    }
-  });
 
-  fwdBtn.addEventListener("click", () => {
-    if (state.chess.currentPly < state.chess.sanMoves.length) {
-      state.chess.currentPly++;
-      state.chess.game = gameAtPly(state.chess.sanMoves, state.chess.currentPly);
-      state.chess.selectedSquare = null;
-      state.chess.legalTargets = [];
-      refreshBoard();
-    }
-  });
+  wrap.appendChild(titleInput);
+
+
+  /*
+    Chess state.
+  */
+
+  const sanMoves =
+    parseMoves(entry.moves);
+
+
+  state.chess.sanMoves =
+    sanMoves.slice();
+
+
+  state.chess.currentPly =
+    sanMoves.length;
+
+
+  state.chess.selectedSquare =
+    null;
+
+
+  state.chess.legalTargets =
+    [];
+
+
+  state.chess.game =
+    gameAtPly(
+      state.chess.sanMoves,
+      state.chess.currentPly
+    );
+
+
+  /*
+    Board.
+  */
+
+  const boardWrap =
+    document.createElement("div");
+
+  boardWrap.className =
+    "board-wrap no-drag";
+
+
+  const board =
+    document.createElement("div");
+
+  board.className =
+    "chessboard";
+
+
+  boardWrap.appendChild(board);
+
+  wrap.appendChild(boardWrap);
+
+
+  /*
+    Move navigation.
+  */
+
+  const nav =
+    document.createElement("div");
+
+  nav.className =
+    "move-nav no-drag";
+
+
+  const backButton =
+    document.createElement("button");
+
+  backButton.type = "button";
+
+  backButton.className =
+    "nav-btn";
+
+  backButton.textContent =
+    "←";
+
+
+  const label =
+    document.createElement("span");
+
+  label.className =
+    "ply-label";
+
+
+  const forwardButton =
+    document.createElement("button");
+
+  forwardButton.type = "button";
+
+  forwardButton.className =
+    "nav-btn";
+
+  forwardButton.textContent =
+    "→";
+
+
+  nav.appendChild(backButton);
+
+  nav.appendChild(label);
+
+  nav.appendChild(forwardButton);
+
+  wrap.appendChild(nav);
+
+
+  function refreshBoard() {
+
+    drawBoard(
+      board,
+      state.chess.game,
+      onSquareClick
+    );
+
+
+    label.textContent =
+      formatMoveList(
+        state.chess.sanMoves,
+        state.chess.currentPly
+      );
+
+
+    backButton.disabled =
+      state.chess.currentPly <= 0;
+
+
+    forwardButton.disabled =
+      state.chess.currentPly >=
+      state.chess.sanMoves.length;
+
+  }
+
+
+  if (!preview) {
+
+    backButton.addEventListener(
+      "click",
+      () => {
+
+        if (
+          state.chess.currentPly <= 0
+        ) {
+          return;
+        }
+
+
+        state.chess.currentPly--;
+
+
+        state.chess.game =
+          gameAtPly(
+            state.chess.sanMoves,
+            state.chess.currentPly
+          );
+
+
+        state.chess.selectedSquare =
+          null;
+
+
+        state.chess.legalTargets =
+          [];
+
+
+        refreshBoard();
+
+      }
+    );
+
+
+    forwardButton.addEventListener(
+      "click",
+      () => {
+
+        if (
+          state.chess.currentPly >=
+          state.chess.sanMoves.length
+        ) {
+          return;
+        }
+
+
+        state.chess.currentPly++;
+
+
+        state.chess.game =
+          gameAtPly(
+            state.chess.sanMoves,
+            state.chess.currentPly
+          );
+
+
+        state.chess.selectedSquare =
+          null;
+
+
+        state.chess.legalTargets =
+          [];
+
+
+        refreshBoard();
+
+      }
+    );
+
+  }
+
 
   function onSquareClick(square) {
-    const game = state.chess.game;
-    const piece = game.get(square);
 
-    if (state.chess.selectedSquare) {
-      if (state.chess.legalTargets.includes(square)) {
-        attemptMove(state.chess.selectedSquare, square);
-        return;
-      }
-      if (piece && piece.color === game.turn()) {
-        selectSquare(square);
-        return;
-      }
-      state.chess.selectedSquare = null;
-      state.chess.legalTargets = [];
-      refreshBoard();
+    if (preview) {
       return;
     }
 
-    if (piece && piece.color === game.turn()) {
-      selectSquare(square);
+
+    const game =
+      state.chess.game;
+
+
+    if (!game) {
+      return;
     }
+
+
+    const piece =
+      game.get(square);
+
+
+    if (state.chess.selectedSquare) {
+
+      if (
+        state.chess.legalTargets.includes(
+          square
+        )
+      ) {
+
+        attemptMove(
+          state.chess.selectedSquare,
+          square
+        );
+
+        return;
+
+      }
+
+
+      if (
+        piece &&
+        piece.color === game.turn()
+      ) {
+
+        selectSquare(square);
+
+        return;
+
+      }
+
+
+      state.chess.selectedSquare =
+        null;
+
+      state.chess.legalTargets =
+        [];
+
+
+      refreshBoard();
+
+      return;
+
+    }
+
+
+    if (
+      piece &&
+      piece.color === game.turn()
+    ) {
+
+      selectSquare(square);
+
+    }
+
   }
+
 
   function selectSquare(square) {
-    state.chess.selectedSquare = square;
-    const moves = state.chess.game.moves({ square, verbose: true });
-    state.chess.legalTargets = moves.map((m) => m.to);
+
+    state.chess.selectedSquare =
+      square;
+
+
+    const moves =
+      state.chess.game.moves({
+        square,
+        verbose: true
+      });
+
+
+    state.chess.legalTargets =
+      moves.map(
+        (move) => move.to
+      );
+
+
     refreshBoard();
+
   }
+
 
   function attemptMove(from, to) {
-    const game = state.chess.game;
-    const piece = game.get(from);
-    let promotion;
-    if (piece && piece.type === "p" && (to[1] === "8" || to[1] === "1")) {
-      promotion = askPromotion(piece.color);
+
+    const game =
+      state.chess.game;
+
+
+    const piece =
+      game.get(from);
+
+
+    let promotion =
+      "q";
+
+
+    if (
+      piece &&
+      piece.type === "p" &&
+      (to[1] === "8" ||
+       to[1] === "1")
+    ) {
+
+      promotion =
+        askPromotion();
+
     }
-    const moveResult = game.move({ from, to, promotion: promotion || "q" });
-    if (!moveResult) return;
 
-  
-    state.chess.sanMoves = state.chess.sanMoves.slice(0, state.chess.currentPly);
-    state.chess.sanMoves.push(moveResult.san);
-    state.chess.currentPly = state.chess.sanMoves.length;
 
-    state.chess.selectedSquare = null;
-    state.chess.legalTargets = [];
+    const result =
+      game.move({
+        from,
+        to,
+        promotion
+      });
+
+
+    if (!result) {
+      return;
+    }
+
+
+    /*
+      If the user went backward and makes
+      a different move, discard the old future.
+    */
+
+    state.chess.sanMoves =
+      state.chess.sanMoves.slice(
+        0,
+        state.chess.currentPly
+      );
+
+
+    state.chess.sanMoves.push(
+      result.san
+    );
+
+
+    state.chess.currentPly =
+      state.chess.sanMoves.length;
+
+
+    state.chess.selectedSquare =
+      null;
+
+
+    state.chess.legalTargets =
+      [];
+
+
     refreshBoard();
 
-    entry.moves = JSON.stringify(state.chess.sanMoves);
-    entry.position = game.fen();
-    queueSave(entry, { moves: entry.moves, position: entry.position });
+
+    entry.moves =
+      JSON.stringify(
+        state.chess.sanMoves
+      );
+
+
+    entry.position =
+      game.fen();
+
+
+    queueSave(
+      entry,
+      {
+        moves: entry.moves,
+        position: entry.position
+      }
+    );
+
   }
+
 
   refreshBoard();
 
 
-  const notesArea = document.createElement("textarea");
-  notesArea.className = "notes-area no-drag";
-  notesArea.placeholder = "Notes...";
-  notesArea.value = entry.notes || "";
-  notesArea.addEventListener("input", () => {
-    entry.notes = notesArea.value;
-    queueSave(entry, { notes: entry.notes });
+  /*
+    Notes.
+  */
 
-    state.book = buildBook(state.entries);
-  });
-  wrap.appendChild(notesArea);
+  const notes =
+    document.createElement("textarea");
+
+  notes.className =
+    "notes-area no-drag";
+
+  notes.placeholder =
+    "Notes...";
+
+  notes.value =
+    entry.notes || "";
 
 
-  const pageNum = document.createElement("div");
-  pageNum.className = "page-number";
-  pageNum.textContent = entry.page_number;
-  wrap.appendChild(pageNum);
+  if (preview) {
+
+    notes.readOnly = true;
+
+  } else {
+
+    notes.addEventListener(
+      "input",
+      () => {
+
+        entry.notes =
+          notes.value;
+
+
+        queueSave(
+          entry,
+          {
+            notes: entry.notes
+          }
+        );
+
+
+        /*
+          Rebuild continuation pages.
+        */
+
+        state.book =
+          buildBook(
+            state.entries
+          );
+
+      }
+    );
+
+  }
+
+
+  wrap.appendChild(notes);
+
+
+  /*
+    Page number.
+  */
+
+  const pageNumber =
+    document.createElement("div");
+
+  pageNumber.className =
+    "page-number";
+
+  pageNumber.textContent =
+    entry.page_number;
+
+
+  wrap.appendChild(pageNumber);
+
 
   container.appendChild(wrap);
+
 }
 
-function askPromotion(color) {
-  const choice = window.prompt("Promote to (q, r, b, n):", "q");
-  const valid = ["q", "r", "b", "n"];
-  return valid.includes((choice || "").toLowerCase()) ? choice.toLowerCase() : "q";
+
+/* ============================================================
+   18. PROMOTION
+============================================================ */
+
+function askPromotion() {
+
+  const answer =
+    window.prompt(
+      "Promote to: q, r, b, or n",
+      "q"
+    );
+
+
+  const valid = [
+    "q",
+    "r",
+    "b",
+    "n"
+  ];
+
+
+  const choice =
+    (answer || "q")
+      .trim()
+      .toLowerCase();
+
+
+  return valid.includes(choice)
+    ? choice
+    : "q";
+
 }
 
-function formatMoveList(sanMoves, uptoPly) {
-  let out = "";
-  for (let i = 0; i < uptoPly; i++) {
-    if (i % 2 === 0) out += `${i / 2 + 1}. `;
-    out += sanMoves[i] + " ";
+
+/* ============================================================
+   19. MOVE LIST
+============================================================ */
+
+function formatMoveList(
+  sanMoves,
+  uptoPly
+) {
+
+  if (!uptoPly) {
+
+    return "Start position";
+
   }
-  return out.trim() || "\u2014";
+
+
+  const output = [];
+
+
+  for (
+    let index = 0;
+    index < uptoPly;
+    index++
+  ) {
+
+    if (index % 2 === 0) {
+
+      output.push(
+        `${Math.floor(index / 2) + 1}.`
+      );
+
+    }
+
+
+    output.push(
+      sanMoves[index]
+    );
+
+  }
+
+
+  return output.join(" ");
+
 }
 
-function renderContinuationPage(container, slot) {
-  const wrap = document.createElement("div");
-  wrap.className = "continuation-page";
 
-  const text = document.createElement("div");
-  text.className = "continuation-text";
-  text.textContent = slot.text || "";
+/* ============================================================
+   20. CONTINUATION PAGE
+============================================================ */
+
+function renderContinuationPage(
+  container,
+  slot,
+  preview = false
+) {
+
+  const wrap =
+    document.createElement("div");
+
+  wrap.className =
+    "continuation-page";
+
+
+  const text =
+    document.createElement("div");
+
+  text.className =
+    "continuation-text";
+
+  text.textContent =
+    slot.text || "";
+
+
   wrap.appendChild(text);
 
-  const pageNum = document.createElement("div");
-  pageNum.className = "page-number";
-  pageNum.textContent = slot.pageNumber;
-  wrap.appendChild(pageNum);
+
+  const pageNumber =
+    document.createElement("div");
+
+  pageNumber.className =
+    "page-number";
+
+  pageNumber.textContent =
+    slot.pageNumber;
+
+
+  wrap.appendChild(pageNumber);
+
 
   container.appendChild(wrap);
+
 }
 
-function renderNewPage(container, slot) {
-  const wrap = document.createElement("div");
-  wrap.className = "new-page";
 
-  const prompt = document.createElement("div");
-  prompt.className = "new-page-prompt";
-  prompt.textContent = "Name this entry";
+/* ============================================================
+   21. NEW ENTRY PAGE
+============================================================ */
+
+function renderNewPage(
+  container,
+  slot,
+  preview = false
+) {
+
+  const wrap =
+    document.createElement("div");
+
+  wrap.className =
+    "new-page";
+
+
+  const prompt =
+    document.createElement("div");
+
+  prompt.className =
+    "new-page-prompt";
+
+  prompt.textContent =
+    "Name this entry";
+
+
   wrap.appendChild(prompt);
 
-  const titleInput = document.createElement("input");
+
+  const titleInput =
+    document.createElement("input");
+
   titleInput.type = "text";
-  titleInput.className = "entry-title no-drag";
-  titleInput.placeholder = "Untitled";
+
+  titleInput.className =
+    "entry-title no-drag";
+
+  titleInput.placeholder =
+    "Untitled";
+
+
   wrap.appendChild(titleInput);
 
-  const pageNum = document.createElement("div");
-  pageNum.className = "page-number";
-  pageNum.textContent = slot.pageNumber;
-  wrap.appendChild(pageNum);
+
+  const pageNumber =
+    document.createElement("div");
+
+  pageNumber.className =
+    "page-number";
+
+  pageNumber.textContent =
+    slot.pageNumber;
+
+
+  wrap.appendChild(pageNumber);
+
+
+  if (!preview) {
+
+    let committed = false;
+
+
+    async function commit() {
+
+      if (committed) {
+        return;
+      }
+
+
+      const title =
+        titleInput.value.trim();
+
+
+      if (!title) {
+        return;
+      }
+
+
+      if (!sb || !state.session) {
+
+        return;
+
+      }
+
+
+      committed = true;
+
+      titleInput.disabled = true;
+
+
+      try {
+
+        const result =
+          await sb
+            .from("notebook_pages")
+            .insert({
+
+              user_id:
+                state.session.user.id,
+
+              page_number:
+                slot.pageNumber,
+
+              title,
+
+              notes: "",
+
+              moves:
+                JSON.stringify([]),
+
+              position:
+                new Chess().fen()
+
+            })
+            .select()
+            .single();
+
+
+        if (result.error) {
+
+          throw result.error;
+
+        }
+
+
+        state.entries.push(
+          result.data
+        );
+
+
+        state.entries.sort(
+          (a, b) =>
+            Number(a.page_number) -
+            Number(b.page_number)
+        );
+
+
+        state.book =
+          buildBook(
+            state.entries
+          );
+
+
+        const newIndex =
+          state.book.findIndex(
+            (bookSlot) =>
+              bookSlot.type === "entry" &&
+              bookSlot.entry.id ===
+                result.data.id
+          );
+
+
+        if (newIndex >= 0) {
+
+          state.slotIndex =
+            newIndex;
+
+        }
+
+
+        renderCurrentSlot();
+
+
+      } catch (error) {
+
+        console.error(
+          "Could not create entry:",
+          error
+        );
+
+
+        committed = false;
+
+        titleInput.disabled =
+          false;
+
+      }
+
+    }
+
+
+    titleInput.addEventListener(
+      "keydown",
+      (event) => {
+
+        if (event.key === "Enter") {
+
+          event.preventDefault();
+
+          titleInput.blur();
+
+        }
+
+      }
+    );
+
+
+    titleInput.addEventListener(
+      "blur",
+      commit
+    );
+
+  }
+
 
   container.appendChild(wrap);
 
-  async function commit() {
-    const title = titleInput.value.trim();
-    if (!title) return;
-    titleInput.disabled = true;
-    const { data, error } = await sb
-      .from("notebook_pages")
-      .insert({
-        user_id: state.session.user.id,
-        page_number: slot.pageNumber,
-        title,
-        notes: "",
-        moves: JSON.stringify([]),
-        position: new Chess().fen(),
-      })
-      .select()
-      .single();
-    if (error) {
-      console.error(error);
-      titleInput.disabled = false;
-      return;
-    }
-    state.entries.push(data);
-    state.entries.sort((a, b) => a.page_number - b.page_number);
-    state.book = buildBook(state.entries);
-    const idx = state.book.findIndex((s) => s.type === "entry" && s.entry.id === data.id);
-    state.slotIndex = idx >= 0 ? idx : state.slotIndex;
-    renderCurrentSlot();
+}
+
+
+/* ============================================================
+   22. CHESS
+============================================================ */
+
+function parseMoves(moves) {
+
+  if (!moves) {
+    return [];
   }
 
-  titleInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      titleInput.blur();
-    }
-  });
-  titleInput.addEventListener("blur", commit);
+
+  if (Array.isArray(moves)) {
+    return moves;
+  }
+
+
+  try {
+
+    const parsed =
+      JSON.parse(moves);
+
+
+    return Array.isArray(parsed)
+      ? parsed
+      : [];
+
+  } catch (error) {
+
+    console.warn(
+      "Could not parse saved chess moves.",
+      error
+    );
+
+
+    return [];
+
+  }
+
 }
+
+
+/* ============================================================
+   23. GAME AT SPECIFIC PLY
+============================================================ */
+
+function gameAtPly(
+  sanMoves,
+  ply
+) {
+
+  const game =
+    new window.Chess();
+
+
+  for (
+    let index = 0;
+    index < ply;
+    index++
+  ) {
+
+    try {
+
+      game.move(
+        sanMoves[index]
+      );
+
+    } catch (error) {
+
+      console.warn(
+        "Invalid saved move:",
+        sanMoves[index],
+        error
+      );
+
+      break;
+
+    }
+
+  }
+
+
+  return game;
+
+}
+
+
+/* ============================================================
+   24. DRAW BOARD
+============================================================ */
 
 const PIECE_GLYPH = {
-  wp: "\u2659", wn: "\u2658", wb: "\u2657", wr: "\u2656", wq: "\u2655", wk: "\u2654",
-  bp: "\u265F", bn: "\u265E", bb: "\u265D", br: "\u265C", bq: "\u265B", bk: "\u265A",
+
+  wp: "♙",
+  wn: "♘",
+  wb: "♗",
+  wr: "♖",
+  wq: "♕",
+  wk: "♔",
+
+  bp: "♟",
+  bn: "♞",
+  bb: "♝",
+  br: "♜",
+  bq: "♛",
+  bk: "♚"
+
 };
 
-function drawBoard(boardEl, game, onSquareClick) {
-  boardEl.innerHTML = "";
-  const board = game.board(); 
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 8; col++) {
-      const file = "abcdefgh"[col];
-      const rank = 8 - row;
-      const square = `${file}${rank}`;
-      const sq = document.createElement("div");
-      sq.className = "square " + ((row + col) % 2 === 0 ? "square-light" : "square-dark");
-      sq.dataset.square = square;
 
-      if (square === state.chess.selectedSquare) sq.classList.add("square-selected");
-      if (state.chess.legalTargets.includes(square)) sq.classList.add("square-target");
+function drawBoard(
+  boardElement,
+  game,
+  clickHandler
+) {
 
-      const piece = board[row][col];
-      if (piece) {
-        const glyph = document.createElement("span");
-        glyph.className = "piece";
-        glyph.textContent = PIECE_GLYPH[piece.color + piece.type];
-        sq.appendChild(glyph);
+  boardElement.innerHTML = "";
+
+
+  const board =
+    game.board();
+
+
+  for (
+    let row = 0;
+    row < 8;
+    row++
+  ) {
+
+    for (
+      let col = 0;
+      col < 8;
+      col++
+    ) {
+
+      const file =
+        "abcdefgh"[col];
+
+
+      const rank =
+        8 - row;
+
+
+      const squareName =
+        `${file}${rank}`;
+
+
+      const square =
+        document.createElement("div");
+
+
+      square.className =
+        "square " +
+        (
+          (row + col) % 2 === 0
+            ? "square-light"
+            : "square-dark"
+        );
+
+
+      square.dataset.square =
+        squareName;
+
+
+      if (
+        squareName ===
+        state.chess.selectedSquare
+      ) {
+
+        square.classList.add(
+          "square-selected"
+        );
+
       }
 
-      sq.addEventListener("click", () => onSquareClick(square));
-      boardEl.appendChild(sq);
+
+      if (
+        state.chess.legalTargets.includes(
+          squareName
+        )
+      ) {
+
+        square.classList.add(
+          "square-target"
+        );
+
+      }
+
+
+      const piece =
+        board[row][col];
+
+
+      if (piece) {
+
+        const pieceElement =
+          document.createElement("span");
+
+
+        pieceElement.className =
+          "piece";
+
+
+        pieceElement.textContent =
+          PIECE_GLYPH[
+            piece.color +
+            piece.type
+          ];
+
+
+        square.appendChild(
+          pieceElement
+        );
+
+      }
+
+
+      square.addEventListener(
+        "click",
+        () => {
+
+          clickHandler(
+            squareName
+          );
+
+        }
+      );
+
+
+      boardElement.appendChild(
+        square
+      );
+
     }
+
   }
+
 }
 
 
-function queueSave(entry, patch) {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    const { error } = await sb.from("notebook_pages").update(patch).eq("id", entry.id);
-    if (error) console.error("Save failed", error);
-  }, 500);
-}
+/* ============================================================
+   25. SAVE
+============================================================ */
 
-let drag = null;
+function queueSave(
+  entry,
+  patch
+) {
 
-function startDrag(clientX, target) {
-  if (target.closest(".no-drag")) return;
-  drag = { startX: clientX, dx: 0, width: el.stage.getBoundingClientRect().width };
-  el.pageCurrent.classList.add("dragging");
-}
-
-function moveDrag(clientX) {
-  if (!drag) return;
-  drag.dx = clientX - drag.startX;
-  const forward = drag.dx < 0;
-  if (forward && !hasNextAvailable()) {
-    drag.dx = Math.max(drag.dx, -40);
+  if (!sb || !state.session) {
+    return;
   }
-  if (!forward && state.slotIndex <= 0) {
-    drag.dx = Math.min(drag.dx, 40);
+
+
+  const entryId =
+    entry.id;
+
+
+  if (saveTimers.has(entryId)) {
+
+    clearTimeout(
+      saveTimers.get(entryId)
+    );
+
   }
-  const pct = Math.max(-1, Math.min(1, drag.dx / drag.width));
-  el.pageCurrent.style.transform = `translateX(${drag.dx}px) rotateY(${pct * -18}deg)`;
-  el.pageCurrent.style.boxShadow = `0 0 ${Math.abs(pct) * 40}px rgba(0,0,0,${Math.abs(pct) * 0.5})`;
+
+
+  const timer =
+    setTimeout(
+      async () => {
+
+        try {
+
+          const result =
+            await sb
+              .from("notebook_pages")
+              .update(patch)
+              .eq("id", entryId)
+              .eq(
+                "user_id",
+                state.session.user.id
+              );
+
+
+          if (result.error) {
+
+            console.error(
+              "Save failed:",
+              result.error
+            );
+
+          }
+
+        } catch (error) {
+
+          console.error(
+            "Save request failed:",
+            error
+          );
+
+        }
+
+
+        saveTimers.delete(
+          entryId
+        );
+
+      },
+      500
+    );
+
+
+  saveTimers.set(
+    entryId,
+    timer
+  );
+
 }
 
-function endDrag() {
-  if (!drag) return;
-  const width = drag.width;
-  const dx = drag.dx;
-  const threshold = width * 0.22;
-  el.pageCurrent.classList.remove("dragging");
 
-  if (dx <= -threshold && hasNextAvailable()) {
-    turnPage(1);
-  } else if (dx >= threshold && state.slotIndex > 0) {
-    turnPage(-1);
-  } else {
-    el.pageCurrent.style.transform = "";
-    el.pageCurrent.style.boxShadow = "";
-  }
-  drag = null;
+/* ============================================================
+   26. PAGE TURNING
+============================================================ */
+
+function setupPageTurning() {
+
+  /*
+    Mouse / touch / pointer drag.
+  */
+
+  el.stage.addEventListener(
+    "pointerdown",
+    (event) => {
+
+      if (isTurning) {
+        return;
+      }
+
+
+      const target =
+        event.target;
+
+
+      /*
+        Do not start a page drag when interacting
+        with inputs, the chessboard, buttons, notes,
+        or other interactive content.
+      */
+
+      if (
+        target.closest(".no-drag") ||
+        target.closest("button") ||
+        target.closest("input") ||
+        target.closest("textarea")
+      ) {
+
+        return;
+
+      }
+
+
+      drag = {
+
+        startX:
+          event.clientX,
+
+        currentX:
+          event.clientX,
+
+        width:
+          el.stage.getBoundingClientRect()
+            .width
+
+      };
+
+
+      try {
+
+        el.stage.setPointerCapture(
+          event.pointerId
+        );
+
+      } catch (error) {
+        /* Pointer capture is optional. */
+      }
+
+
+      el.pageCurrent.classList.add(
+        "dragging"
+      );
+
+    }
+  );
+
+
+  el.stage.addEventListener(
+    "pointermove",
+    (event) => {
+
+      if (!drag) {
+        return;
+      }
+
+
+      drag.currentX =
+        event.clientX;
+
+
+      updateDrag();
+
+    }
+  );
+
+
+  el.stage.addEventListener(
+    "pointerup",
+    (event) => {
+
+      if (!drag) {
+        return;
+      }
+
+
+      try {
+
+        el.stage.releasePointerCapture(
+          event.pointerId
+        );
+
+      } catch (error) {
+        /* Optional. */
+      }
+
+
+      finishDrag();
+
+    }
+  );
+
+
+  el.stage.addEventListener(
+    "pointercancel",
+    () => {
+
+      if (drag) {
+        cancelDrag();
+      }
+
+    }
+  );
+
+
+  /*
+    Edge buttons.
+  */
+
+  el.edgePrev.addEventListener(
+    "click",
+    () => {
+
+      if (
+        state.slotIndex > 0
+      ) {
+
+        turnPage(-1);
+
+      }
+
+    }
+  );
+
+
+  el.edgeNext.addEventListener(
+    "click",
+    () => {
+
+      if (
+        state.slotIndex <
+        state.book.length - 1
+      ) {
+
+        turnPage(1);
+
+      }
+
+    }
+  );
+
 }
 
-function hasNextAvailable() {
-  return true; 
-}
 
-function turnPage(direction) {
-  el.pageCurrent.classList.add("turning");
-  el.pageCurrent.style.transform = `translateX(${direction * -100}%) rotateY(${direction * -30}deg)`;
-  el.pageCurrent.style.opacity = "0.4";
-  setTimeout(() => {
-    state.slotIndex = Math.max(0, state.slotIndex + direction);
-    el.pageCurrent.classList.remove("turning");
-    el.pageCurrent.style.transform = "";
-    el.pageCurrent.style.opacity = "";
-    el.pageCurrent.style.boxShadow = "";
-    renderCurrentSlot();
-  }, 260);
-}
-
-el.stage.addEventListener("pointerdown", (e) => {
-  startDrag(e.clientX, e.target);
-});
-el.stage.addEventListener("pointermove", (e) => {
-  if (drag) moveDrag(e.clientX);
-});
-window.addEventListener("pointerup", () => {
-  if (drag) endDrag();
-});
-window.addEventListener("pointercancel", () => {
-  if (drag) endDrag();
-});
-
-el.edgePrev.addEventListener("click", () => {
-  if (state.slotIndex > 0) turnPage(-1);
-});
-el.edgeNext.addEventListener("click", () => {
-  turnPage(1);
-});
-
-(async function init() {
-  const { data } = await sb.auth.getSession();
-  state.session = data.session;
-})();
+/* ============================================================
+   27. DRAG UPDATE
+=======================
