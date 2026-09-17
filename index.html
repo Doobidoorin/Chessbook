@@ -3,34 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Chessbook</title>
+
   <link rel="stylesheet" href="style.css">
-  <script 
-   src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
- <main class="book-cover">
-  <div class="cover-band top-band"></div>
-
- <section class="cover-content" id="book-cover">
-    <div class="title-plaque">
-      <h1>𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</h1>
-    </div>
-
-    <p>Note your moves</p>
-  </section>
-
-  <div class="cover-band bottom-band"></div>
-</main>
-<main class="contents-page" id="contents-page">
-    <div class="contents-header">
-        <h1>𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼</h1>
-        <button class="search-button" aria-label="Search">⌕</button>
-    </div>
   
-     <div class="contents-list">
-     </div>
-</main>
+  <main class="book-cover" id="book-cover">
+
+    <div class="cover-band top-band"></div>
+
+    <section class="cover-content">
+      <div class="title-plaque">
+        <h1>𝓒𝓱𝓮𝓼𝓼𝓫𝓸𝓸𝓴</h1>
+      </div>
+
+      <p>Note your moves</p>
+    </section>
+
+    <div class="cover-band bottom-band"></div>
+
+  </main>
+
+  <main class="contents-page" id="contents-page">
+
+    <div class="contents-header">
+      <h1>𝓒𝓸𝓷𝓽𝓮𝓷𝓽𝓼</h1>
+
+      <button
+        class="search-button"
+        id="search-button"
+        aria-label="Search"
+        type="button"
+      >
+        ⌕
+      </button>
+    </div>
+
+    <div class="contents-list" id="contents-list">
+
+    </div>
+
+  </main>
+
+  <main class="notebook-page" id="notebook-page">
+
+    <div class="page-header">
+      <input
+        type="text"
+        id="page-title"
+        placeholder="Page title"
+        maxlength="100"
+      >
+    </div>
+
+    <div class="chessboard-container" id="chessboard-container">
+ 
+    </div>
+
+    <textarea
+      id="page-notes"
+      placeholder="Write your notes..."
+    ></textarea>
+
+    <div class="page-number" id="page-number">
+      1
+    </div>
+
+  </main>
+
+
   <script src="app.js"></script>
+
 </body>
 </html>
