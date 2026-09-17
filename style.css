@@ -187,4 +187,7 @@ body {
   min-width: 30px;
   text-align: right;
 }
+#contents-page {
+  display: none;
+}
 
