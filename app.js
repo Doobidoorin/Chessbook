@@ -12,11 +12,9 @@
 
   var replayState = {};
 
-  var liveGame = new Chess();
   var board = null;
 
   var el = {
-    bookApp: document.getElementById('book-app'),
     bookCover: document.getElementById('book-cover'),
     bookStage: document.getElementById('book-stage'),
     book: document.getElementById('book'),
@@ -28,18 +26,16 @@
 
     notebookPage: document.getElementById('notebook-page'),
     notebookTitle: document.getElementById('notebook-title'),
-    backToContents: document.getElementById('back-to-contents'),
+    backToContents: document.getElementById('book-stage').querySelector('#back-to-contents'),
 
-    chessBoardContainer: document.getElementById('chess-board-container'),
     moveHistoryPanel: document.getElementById('move-history-panel'),
     moveHistoryList: document.getElementById('move-history-list'),
+    notes: document.getElementById('notebook-notes'),
+    pageNumber: document.getElementById('notebook-page-number'),
 
-    notebookNotes: document.getElementById('notebook-notes'),
-    notebookPageNumber: document.getElementById('notebook-page-number'),
-
-    previousPageBtn: document.getElementById('previous-page'),
-    nextPageBtn: document.getElementById('next-page'),
-    currentPageNumberLabel: document.getElementById('current-page-number'),
+    previous: document.getElementById('previous-page'),
+    next: document.getElementById('next-page'),
+    pageLabel: document.getElementById('current-page-number'),
   };
 
   function loadState() {
@@ -52,23 +48,21 @@
       var parsed = JSON.parse(raw);
       if (!parsed || !Array.isArray(parsed.pages)) {
         return { pages: [], nextPageNumber: 1 };
-      }
-
+        }
       if (typeof parsed.nextPageNumber !== 'number') {
         parsed.nextPageNumber = parsed.pages.length + 1;
       }
 
       parsed.pages.forEach(function (page) {
-        if (!page) return;
-        if (!Array.isArray(page.moves)) page.moves = [];
-        if (!Array.isArray(page.redoStack)) page.redoStack = [];
-        if (typeof page.title !== 'string') page.title = '';
-        if (typeof page.notes !== 'string') page.notes = '';
+        page.title = typeof page.title === 'string' ? page.title : '';
+        page.notes = typeof page.notes === 'string' ? page.notes : '';
+        page.moves = Array.isArray(page.moves) ? page.moves : [];
+        page.redoStack = Array.isArray(page.redoStack) ? page.redoStack : [];
       });
 
       return parsed;
     } catch (error) {
-      console.error('Chessbook: failed to load saved state', error);
+      console.error('Chessbook: failed to load local notebook', error);
       return { pages: [], nextPageNumber: 1 };
     }
   }
@@ -77,166 +71,90 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
-      console.error('Chessbook: failed to save state', error);
+      console.error('Chessbook: failed to save local notebook', error);
     }
   }
 
-  function getPage(id) {
-    for (var i = 0; i < state.pages.length; i += 1) {
-      if (state.pages[i].id === id) {
-        return state.pages[i];
-      }
-    }
-    return null;
+  function pageById(id) {
+    return state.pages.find(function (page) {
+      return page.id === id;
+    }) || null;
   }
 
-  function sortedPages() {
+  function pagesInOrder() {
     return state.pages.slice().sort(function (a, b) {
       return a.pageNumber - b.pageNumber;
     });
   }
 
-  function makePageId() {
+  function newPageId() {
     return 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   }
 
-  function clearChildren(node) {
+  function clear(node) {
     while (node.firstChild) {
       node.removeChild(node.firstChild);
     }
   }
 
-  function buildMoveControls() {
-    var wrap = document.createElement('div');
-    wrap.className = 'move-controls';
-
-    var controlRow = document.createElement('div');
-    controlRow.className = 'move-control-row';
-
-    var buttons = [
-      { id: 'undo-btn', label: 'Undo' },
-      { id: 'redo-btn', label: 'Redo' },
-      { id: 'reset-btn', label: 'Reset' },
-      { id: 'replay-prev-btn', label: '⟨ Replay' },
-      { id: 'replay-next-btn', label: 'Replay ⟩' },
-      { id: 'continue-btn', label: 'Continue' }
-    ];
-
-    buttons.forEach(function (buttonConfig) {
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'move-button';
-      button.id = buttonConfig.id;
-      button.textContent = buttonConfig.label;
-      controlRow.appendChild(button);
-    });
-
-    wrap.appendChild(controlRow);
-    return wrap;
-  }
-
-  function installMoveControls() {
-    var controls = buildMoveControls();
-    var heading = el.moveHistoryPanel.querySelector('.move-history-heading');
-    if (heading && heading.nextSibling) {
-      el.moveHistoryPanel.insertBefore(controls, heading.nextSibling);
-    } else {
-      el.moveHistoryPanel.appendChild(controls);
-    }
-  }
-
-  function normalizeMoveObject(move, moveNumber) {
-    var safeMove = {
-      moveNumber: moveNumber,
-      color: move.color,
-      san: move.san,
-      from: move.from,
-      to: move.to,
-      promotion: move.promotion || null,
-      fen: move.fen || null
-    };
-
-    if (safeMove.fen === null) {
-      safeMove.fen = new Chess().fen();
-    }
-
-    return safeMove;
-  }
-
-  function reconstructGameFromMoves(moves) {
+  function gameFromMoves(moves) {
     var game = new Chess();
-    var movesToApply = Array.isArray(moves) ? moves : [];
-
-    for (var i = 0; i < movesToApply.length; i += 1) {
-      var entry = movesToApply[i];
-      var moveConfig = {
-        from: entry.from,
-        to: entry.to,
-        promotion: entry.promotion || 'q'
-      };
-
+    (moves || []).forEach(function (entry) {
       if (!entry || !entry.from || !entry.to) {
-        continue;
+        return;
       }
-
       try {
-        game.move(moveConfig);
+        game.move({
+          from: entry.from,
+          to: entry.to,
+          promotion: entry.promotion || 'q'
+        });
       } catch (error) {
-        console.warn('Chessbook: failed to reconstruct position from saved move record', error);
+        console.warn('Chessbook: skipped invalid saved move', entry, error);
       }
-    }
-
+    });
     return game;
   }
 
-  function getCurrentReviewCursor(pageId) {
-    var page = getPage(pageId);
-    if (!page) return 0;
+  function cursorFor(page) {
+    if (!replayState[page.id]) {
+      replayState[page.id] = { cursor: page.moves.length };
+    }
+    return replayState[page.id].cursor;
+  }
 
-    if (!replayState[pageId]) {
-      replayState[pageId] = { cursor: page.moves.length };
+  function renderBoard(page) {
+    if (!board || !page) {
+      return;
     }
 
-    return replayState[pageId].cursor;
+    var game = gameFromMoves(page.moves.slice(0, cursorFor(page)));
+    board.position(game.fen(), false);
+    window.requestAnimationFrame(function () {
+      if (board) {
+        board.resize();
+      }
+    });
   }
 
-  function updateBoardFromGameState(gameState) {
-    if (!board) return;
-
-    try {
-      board.position(gameState.fen());
-    } catch (error) {
-      console.warn('Chessbook: failed to render real chessboard state', error);
+  function renderMoves(page) {
+    if (!page) {
+      return;
     }
-  }
 
-  function syncBoardToReplayState(pageId) {
-    var page = getPage(pageId);
-    if (!page) return;
+    var cursor = cursorFor(page);
+    clear(el.moveHistoryList);
 
-    var cursor = getCurrentReviewCursor(pageId);
-    var gameState = reconstructGameFromMoves(page.moves.slice(0, cursor));
-    updateBoardFromGameState(gameState);
-  }
+    if (!page.moves.length) {
+      var empty = document.createElement('div');
+      empty.className = 'move-row';
+      empty.textContent = 'No moves recorded yet';
+      empty.style.opacity = '0.5';
+      el.moveHistoryList.appendChild(empty);
+      return;
+    }
 
-  function syncBoardToLiveGame(pageId) {
-    var page = getPage(pageId);
-    if (!page) return;
-
-    var liveState = reconstructGameFromMoves(page.moves);
-    updateBoardFromGameState(liveState);
-    liveGame = liveState;
-  }
-
-  function renderMoveHistory(pageId) {
-    var page = getPage(pageId);
-    if (!page) return;
-
-    var cursor = getCurrentReviewCursor(pageId);
-    clearChildren(el.moveHistoryList);
-
-    for (var i = 0; i < page.moves.length; i += 1) {
-      var entry = page.moves[i];
+    for (var i = 0; i < page.moves.length; i += 2) {
       var row = document.createElement('div');
       row.className = 'move-row';
 
@@ -244,277 +162,264 @@
         row.classList.add('dimmed');
       }
 
-      if (i === cursor - 1 && cursor > 0) {
+      if (cursor > 0 && (i === cursor - 1 || i + 1 === cursor - 1)) {
         row.classList.add('current');
       }
 
-      var moveNumber = document.createElement('span');
-      moveNumber.className = 'move-number';
-      moveNumber.textContent = String(entry.moveNumber) + '.';
+      var number = document.createElement('span');
+      number.className = 'move-number';
+      number.textContent = page.moves[i].moveNumber + '.';
 
-      var whiteMove = document.createElement('span');
-      whiteMove.className = 'move-white';
+      var white = document.createElement('span');
+      white.className = 'move-white';
+      white.textContent = page.moves[i].color === 'w' ? page.moves[i].san : '';
 
-      var blackMove = document.createElement('span');
-      blackMove.className = 'move-black';
+      var black = document.createElement('span');
+      black.className = 'move-black';
+      black.textContent = page.moves[i + 1] && page.moves[i + 1].color === 'b' ? page.moves[i + 1].san : '';
 
-      if (entry.color === 'w') {
-        whiteMove.textContent = entry.san;
-        blackMove.textContent = '';
-      } else {
-        whiteMove.textContent = '';
-        blackMove.textContent = entry.san;
-      }
-
-      row.appendChild(moveNumber);
-      row.appendChild(whiteMove);
-      row.appendChild(blackMove);
+      row.appendChild(number);
+      row.appendChild(white);
+      row.appendChild(black);
       el.moveHistoryList.appendChild(row);
     }
 
-    if (page.moves.length === 0) {
-      var empty = document.createElement('div');
-      empty.className = 'move-row';
-      empty.textContent = 'No moves recorded yet';
-      empty.style.opacity = '0.5';
-      el.moveHistoryList.appendChild(empty);
-    }
-
-    if (cursor >= page.moves.length) {
+    if (cursor === page.moves.length) {
       el.moveHistoryList.scrollTop = el.moveHistoryList.scrollHeight;
     }
   }
 
-  function updateEntryLockUI(pageId) {
-    var page = getPage(pageId);
-    if (!page) return;
-
-    var reviewing = getCurrentReviewCursor(pageId) !== page.moves.length;
-
-    var undoBtn = document.getElementById('undo-btn');
-    var redoBtn = document.getElementById('redo-btn');
-    var resetBtn = document.getElementById('reset-btn');
-    var replayPrevBtn = document.getElementById('replay-prev-btn');
-    var replayNextBtn = document.getElementById('replay-next-btn');
-    var continueBtn = document.getElementById('continue-btn');
-
-    if (!undoBtn || !redoBtn || !resetBtn || !replayPrevBtn || !replayNextBtn || !continueBtn) {
-      return;
-    }
-
-    undoBtn.disabled = page.moves.length === 0;
-    redoBtn.disabled = page.redoStack.length === 0;
-    resetBtn.disabled = page.moves.length === 0;
-
-    replayPrevBtn.disabled = getCurrentReviewCursor(pageId) === 0;
-    replayNextBtn.disabled = getCurrentReviewCursor(pageId) === page.moves.length;
-
-    continueBtn.style.display = reviewing ? 'inline-block' : 'none';
-
-    var whiteInputFields = document.querySelectorAll('input[type=text]');
-    whiteInputFields.forEach(function (input) {
-      if (input.id && input.id.indexOf('move-input-white') === -1 && input.id.indexOf('move-input-black') === -1) {
-        return;
-      }
+  function updateControls(page) {
+    var cursor = cursorFor(page);
+    var ids = ['undo-btn', 'redo-btn', 'reset-btn', 'replay-prev-btn', 'replay-next-btn', 'continue-btn'];
+    var buttons = {};
+    ids.forEach(function (id) {
+      buttons[id] = document.getElementById(id);
     });
 
-    if (page.moves.length === 0) {
-      return;
-    }
+    buttons['undo-btn'].disabled = page.moves.length === 0;
+    buttons['redo-btn'].disabled = page.redoStack.length === 0;
+    buttons['reset-btn'].disabled = page.moves.length === 0;
+    buttons['replay-prev-btn'].disabled = cursor === 0;
+    buttons['replay-next-btn'].disabled = cursor === page.moves.length;
+    buttons['continue-btn'].style.display = cursor === page.moves.length ? 'none' : 'inline-block';
 
-    if (reviewing) {
-      // Board is in review state: no new moves are allowed.
-      return;
+    // Keep controls usable on mobile.
+    if (window.innerWidth <= 760) {
+      buttons['replay-prev-btn'].style.fontSize = '10px';
+      buttons['replay-next-btn'].style.fontSize = '10px';
     }
   }
 
-  function addPly(pageId, moveRecord) {
-    var page = getPage(pageId);
-    if (!page) return;
+  function refreshPage(page) {
+    renderMoves(page);
+    renderBoard(page);
+    updateControls(page);
+    saveState();
+  }
 
-    page.moves.push(moveRecord);
+  function recordMove(source, target) {
+    var page = pageById(currentPageId);
+    if (!page || cursorFor(page) !== page.moves.length) {
+      return 'snapback';
+    }
+
+    var game = gameFromMoves(page.moves);
+    var move;
+
+    try {
+      move = game.move({
+        from: source,
+        to: target,
+        promotion: 'q'
+      });
+    } catch (error) {
+      move = null;
+    }
+
+    if (!move) {
+      return 'snapback';
+    }
+
+    page.moves.push({
+      moveNumber: Math.floor(page.moves.length / 2) + 1,
+      color: move.color,
+      san: move.san,
+      from: move.from,
+      to: move.to,
+      promotion: move.promotion || null,
+      fen: game.fen()
+    });
     page.redoStack = [];
-
-    replayState[pageId] = { cursor: page.moves.length };
-    saveState();
-    renderMoveHistory(pageId);
-    syncBoardToLiveGame(pageId);
-    updateEntryLockUI(pageId);
+    replayState[page.id] = { cursor: page.moves.length };
+    refreshPage(page);
+    return true;
   }
 
-  function undoPly(pageId) {
-    var page = getPage(pageId);
-    if (!page || page.moves.length === 0) return;
+  function buildControls() {
+    var wrap = document.createElement('div');
+    wrap.className = 'move-controls';
 
-    var lastMove = page.moves.pop();
-    page.redoStack.push(lastMove);
+    var row = document.createElement('div');
+    row.className = 'move-control-row';
 
-    replayState[pageId] = { cursor: page.moves.length };
-    saveState();
-    renderMoveHistory(pageId);
-    syncBoardToReplayState(pageId);
-    updateEntryLockUI(pageId);
+    var buttons = [
+      ['undo-btn', 'Undo'],
+      ['redo-btn', 'Redo'],
+      ['reset-btn', 'Reset'],
+      ['replay-prev-btn', '⟨ Replay'],
+      ['replay-next-btn', 'Replay ⟩'],
+      ['continue-btn', 'Continue']
+    ];
+
+    buttons.forEach(function (item) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'move-button';
+      button.id = item[0];
+      button.textContent = item[1];
+      row.appendChild(button);
+    });
+
+    wrap.appendChild(row);
+    el.moveHistoryPanel.insertBefore(wrap, el.moveHistoryList);
+
+    document.getElementById('undo-btn').onclick = function () {
+      var page = pageById(currentPageId);
+      if (!page || !page.moves.length) {
+        return;
+      }
+      page.redoStack.push(page.moves.pop());
+      replayState[page.id] = { cursor: page.moves.length };
+      refreshPage(page);
+    };
+
+    document.getElementById('redo-btn').onclick = function () {
+      var page = pageById(currentPageId);
+      if (!page || !page.redoStack.length) {
+        return;
+      }
+      page.moves.push(page.redoStack.pop());
+      replayState[page.id] = { cursor: page.moves.length };
+      refreshPage(page);
+    };
+
+    document.getElementById('reset-btn').onclick = function () {
+      var page = pageById(currentPageId);
+      if (!page || !page.moves.length || !window.confirm('Clear every recorded move on this page? This cannot be undone.')) {
+        return;
+      }
+      page.moves = [];
+      page.redoStack = [];
+      replayState[page.id] = { cursor: 0 };
+      refreshPage(page);
+    };
+
+    document.getElementById('replay-prev-btn').onclick = function () {
+      stepReplay(-1);
+    };
+
+    document.getElementById('replay-next-btn').onclick = function () {
+      stepReplay(1);
+    };
+
+    document.getElementById('continue-btn').onclick = function () {
+      var page = pageById(currentPageId);
+      if (!page) {
+        return;
+      }
+      replayState[page.id] = { cursor: page.moves.length };
+      refreshPage(page);
+    };
   }
 
-  function redoPly(pageId) {
-    var page = getPage(pageId);
-    if (!page || page.redoStack.length === 0) return;
-
-    var nextMove = page.redoStack.pop();
-    page.moves.push(nextMove);
-
-    replayState[pageId] = { cursor: page.moves.length };
-    saveState();
-    renderMoveHistory(pageId);
-    syncBoardToReplayState(pageId);
-    updateEntryLockUI(pageId);
-  }
-
-  function resetPage(pageId) {
-    var page = getPage(pageId);
-    if (!page || page.moves.length === 0) return;
-
-    var confirmed = window.confirm('Clear every recorded move on this page? This cannot be undone.');
-    if (!confirmed) return;
-
-    page.moves = [];
-    page.redoStack = [];
-    replayState[pageId] = { cursor: 0 };
-    saveState();
-    renderMoveHistory(pageId);
-    syncBoardToReplayState(pageId);
-    updateEntryLockUI(pageId);
-  }
-
-  function replayStep(pageId, delta) {
-    var page = getPage(pageId);
+  function stepReplay(delta) {
+    var page = pageById(currentPageId);
     if (!page) return;
 
-    if (!replayState[pageId]) {
-      replayState[pageId] = { cursor: page.moves.length };
-    }
+    replayState[page.id] = {
+      cursor: Math.max(0, Math.min(page.moves.length, cursorFor(page) + delta))
+    };
 
-    replayState[pageId].cursor = Math.max(0, Math.min(page.moves.length, replayState[pageId].cursor + delta));
-    saveState();
-    renderMoveHistory(pageId);
-    syncBoardToReplayState(pageId);
-    updateEntryLockUI(pageId);
-  }
-
-  function replayGoLive(pageId) {
-    var page = getPage(pageId);
-    if (!page) return;
-
-    replayState[pageId] = { cursor: page.moves.length };
-    saveState();
-    renderMoveHistory(pageId);
-    syncBoardToLiveGame(pageId);
-    updateEntryLockUI(pageId);
+    refreshPage(page);
   }
 
   function renderContents() {
-    clearChildren(el.contentsList);
-
-    var titled = sortedPages().filter(function (page) {
-      return page && page.title && page.title.trim();
-    });
+    clear(el.contentsList);
 
     var query = searchQuery.trim().toLowerCase();
-    var visible = query
-      ? titled.filter(function (page) {
-          return page.title.toLowerCase().indexOf(query) !== -1;
-        })
-      : titled;
+    var visible = pagesInOrder().filter(function (page) {
+      return page.title.trim() && (!query || page.title.toLowerCase().indexOf(query) !== -1);
+    });
 
-    el.contentsEmptyState.style.display = visible.length === 0 ? '' : 'none';
+    el.contentsEmptyState.style.display = visible.length ? 'none' : '';
 
     visible.forEach(function (page) {
       var entry = document.createElement('div');
       entry.className = 'contents-entry';
-      entry.setAttribute('role', 'button');
       entry.tabIndex = 0;
-      entry.style.cursor = 'pointer';
+      entry.setAttribute('role', 'button');
 
-      var titleEl = document.createElement('span');
-      titleEl.className = 'contents-entry-title';
-      titleEl.textContent = page.title;
+      var title = document.createElement('span');
+      title.className = 'contents-entry-title';
+      title.textContent = page.title;
 
-      var numEl = document.createElement('span');
-      numEl.className = 'contents-entry-page';
-      numEl.textContent = String(page.pageNumber);
+      var number = document.createElement('span');
+      number.className = 'contents-entry-page';
+      number.textContent = page.pageNumber;
 
-      entry.appendChild(titleEl);
-      entry.appendChild(numEl);
+      entry.appendChild(title);
+      entry.appendChild(number);
 
-      entry.addEventListener('click', function () {
-        openNotebookPage(page.id, 'forward');
-      });
+      entry.onclick = function () {
+        openPage(page.id, 'forward');
+      };
 
-      entry.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openNotebookPage(page.id, 'forward');
+      entry.onkeydown = function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openPage(page.id, 'forward');
         }
-      });
+      };
 
       el.contentsList.appendChild(entry);
     });
   }
 
-  function toggleContentsSearch() {
-    searchQuery = '';
-    searchInputEl = searchInputEl || document.createElement('input');
-    searchInputEl.type = 'text';
-    searchInputEl.placeholder = 'Search titles…';
-    searchInputEl.autocomplete = 'off';
-    searchInputEl.style.width = '100%';
-    searchInputEl.style.margin = '14px 0 0';
-    searchInputEl.style.padding = '8px 10px';
-    searchInputEl.style.border = '1px solid rgba(79, 56, 36, 0.25)';
-    searchInputEl.style.borderRadius = '2px';
-    searchInputEl.style.background = 'rgba(255, 250, 237, 0.35)';
-    searchInputEl.style.color = 'var(--ink)';
-    searchInputEl.style.fontFamily = 'Georgia, "Times New Roman", serif';
-    searchInputEl.style.fontSize = '14px';
-    searchInputEl.style.fontStyle = 'italic';
-    searchInputEl.style.outline = 'none';
-
-    if (!searchInputEl.parentNode) {
+  function toggleSearch() {
+    if (!searchInputEl) {
+      searchInputEl = document.createElement('input');
+      searchInputEl.type = 'search';
+      searchInputEl.placeholder = 'Search titles…';
+      searchInputEl.style.cssText = 'width:100%;margin:14px 0 0;padding:8px 10px;border:1px solid rgba(79,56,36,.25);background:rgba(255,250,237,.35);color:var(--ink);font:italic 14px Georgia,serif;outline:none;';
+      searchInputEl.oninput = function () {
+        searchQuery = searchInputEl.value;
+        renderContents();
+      };
       el.contentsList.parentNode.insertBefore(searchInputEl, el.contentsList);
     }
 
-    searchInputEl.style.display = searchInputEl.style.display === 'block' ? 'none' : 'block';
+    searchInputEl.style.display = searchInputEl.style.display === 'none' ? 'block' : 'none';
     if (searchInputEl.style.display === 'block') {
       searchInputEl.focus();
     } else {
       searchInputEl.value = '';
+      searchQuery = '';
       renderContents();
     }
-    searchInputEl.addEventListener('input', function () {
-      searchQuery = searchInputEl.value;
-      renderContents();
-    });
   }
 
-  function showPage(pageEl, direction) {
-    [el.contentsPage, el.notebookPage].forEach(function (p) {
-      p.style.display = (p === pageEl) ? 'block' : 'none';
+  function showPage(page, direction) {
+    [el.contentsPage, el.notebookPage].forEach(function (item) {
+      item.style.display = item === page ? 'block' : 'none';
     });
 
     if (direction) {
       el.book.classList.remove('is-turning-forward', 'is-turning-backward');
-      pageEl.classList.remove('page-enter-forward', 'page-enter-backward');
-
-      void pageEl.offsetWidth;
-
-      var cls = direction === 'forward' ? 'is-turning-forward' : 'is-turning-backward';
-      var enterCls = direction === 'forward' ? 'page-enter-forward' : 'page-enter-backward';
-      el.book.classList.add(cls);
-      pageEl.classList.add(enterCls);
-
+      void page.offsetWidth;
+      el.book.classList.add(direction === 'forward' ? 'is-turning-forward' : 'is-turning-backward');
       setTimeout(function () {
         el.book.classList.remove('is-turning-forward', 'is-turning-backward');
-        pageEl.classList.remove('page-enter-forward', 'page-enter-backward');
       }, 480);
     }
 
@@ -522,97 +427,99 @@
   }
 
   function updateNavButtons() {
-    el.previousPageBtn.disabled = currentView === 'contents';
+    el.previous.disabled = currentView === 'contents';
   }
 
   function openContents(direction) {
     currentView = 'contents';
     currentPageId = null;
-    el.currentPageNumberLabel.textContent = 'Contents';
+    el.pageLabel.textContent = 'Contents';
     el.book.dataset.page = 'contents';
     renderContents();
     showPage(el.contentsPage, direction);
   }
 
-  function openNotebookPage(pageId, direction) {
-    var page = getPage(pageId);
-    if (!page) return;
-
-    currentView = 'notebook';
-    currentPageId = pageId;
-    el.book.dataset.page = 'notebook';
-
-    el.notebookTitle.value = page.title || '';
-    el.notebookNotes.value = page.notes || '';
-    el.notebookPageNumber.textContent = String(page.pageNumber);
-    el.currentPageNumberLabel.textContent = page.title ? page.title : ('Page ' + page.pageNumber);
-
-    if (!replayState[pageId]) {
-      replayState[pageId] = { cursor: page.moves.length };
+  function openPage(id, direction) {
+    var page = pageById(id);
+    if (!page) {
+      return;
     }
 
-    renderMoveHistory(pageId);
-    syncBoardToReplayState(pageId);
-    updateEntryLockUI(pageId);
+    currentView = 'notebook';
+    currentPageId = id;
+    el.book.dataset.page = 'notebook';
+
+    el.notebookTitle.value = page.title;
+    el.notes.value = page.notes;
+    el.pageNumber.textContent = page.pageNumber;
+    el.pageLabel.textContent = page.title || 'Page ' + page.pageNumber;
+
+    if (!replayState[id]) {
+      replayState[id] = { cursor: page.moves.length };
+    }
+
+    renderMoves(page);
+    renderBoard(page);
+    updateControls(page);
     showPage(el.notebookPage, direction);
   }
 
-  function createAndOpenPage(direction) {
-    var pageNumber = state.nextPageNumber;
-    state.nextPageNumber += 1;
-
+  function createPage(direction) {
     var page = {
-      id: makePageId(),
-      pageNumber: pageNumber,
+      id: newPageId(),
+      pageNumber: state.nextPageNumber,
       title: '',
       notes: '',
       moves: [],
       redoStack: [],
     };
 
+    state.nextPageNumber += 1;
+
     state.pages.push(page);
     saveState();
-    renderContents();
-    openNotebookPage(page.id, direction);
+    openPage(page.id, direction);
   }
 
-  function goNext() {
-    var pages = sortedPages();
+  function nextPage() {
+    var pages = pagesInOrder();
 
     if (currentView === 'contents') {
-      if (pages.length === 0) {
-        createAndOpenPage('forward');
+      if (pages.length) {
+        openPage(pages[0].id, 'forward');
       } else {
-        openNotebookPage(pages[0].id, 'forward');
+        createPage('forward');
       }
       return;
     }
 
     if (currentView === 'notebook') {
-      var idx = pages.findIndex(function (page) {
+      var index = pages.findIndex(function (page) {
         return page.id === currentPageId;
       });
 
-      if (idx === pages.length - 1) {
-        createAndOpenPage('forward');
+      if (index === pages.length - 1) {
+        createPage('forward');
       } else {
-        openNotebookPage(pages[idx + 1].id, 'forward');
+        openPage(pages[index + 1].id, 'forward');
       }
     }
   }
 
-  function goPrevious() {
-    if (currentView !== 'notebook') return;
+  function previousPage() {
+    if (currentView !== 'notebook') {
+      return;
+    }
 
-    var pages = sortedPages();
-    var idx = pages.findIndex(function (page) {
+    var pages = pagesInOrder();
+    var index = pages.findIndex(function (page) {
       return page.id === currentPageId;
     });
 
-    if (idx <= 0) {
+    if (index <= 0) {
       openContents('backward');
     } else {
-      openNotebookPage(pages[idx - 1].id, 'backward');
+      openPage(pages[index - 1].id, 'backward');
     }
   }
 
@@ -620,16 +527,20 @@
     var startX = null;
     var startY = null;
 
-    el.book.addEventListener('touchstart', function (e) {
-      if (e.touches.length !== 1) return;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
+    el.book.addEventListener('touchstart', function (event) {
+      if (event.touches.length !== 1) {
+        return;
+      }
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
     }, { passive: true });
 
-    el.book.addEventListener('touchend', function (e) {
-      if (startX === null) return;
+    el.book.addEventListener('touchend', function (event) {
+      if (startX === null) {
+        return;
+      }
 
-      var t = e.changedTouches[0];
+      var t = event.changedTouches[0];
       var dx = t.clientX - startX;
       var dy = t.clientY - startY;
       startX = null;
@@ -639,60 +550,59 @@
       if (Math.abs(dx) < Math.abs(dy) * 1.3) return;
 
       if (dx > 0) {
-        goPrevious();
+        previousPage();
       } else {
-        goNext();
+        nextPage();
       }
     }, { passive: true });
   }
 
   function wireTitleAndNotes() {
-    el.notebookTitle.addEventListener('input', function () {
-      var page = getPage(currentPageId);
-      if (!page) return;
+    el.notebookTitle.oninput = function () {
+      var page = pageById(currentPageId);
+      if (!page) {
+        return;
+      }
 
       page.title = el.notebookTitle.value;
       saveState();
       renderContents();
-      el.currentPageNumberLabel.textContent = page.title ? page.title : ('Page ' + page.pageNumber);
-    });
+      el.pageLabel.textContent = page.title || 'Page ' + page.pageNumber;
+    };
 
-    var notesTimer = null;
-    el.notebookNotes.addEventListener('input', function () {
-      var page = getPage(currentPageId);
-      if (!page) return;
+    el.notes.oninput = function () {
+      var page = pageById(currentPageId);
+      if (!page) {
+        return;
+      }
 
-      page.notes = el.notebookNotes.value;
-      clearTimeout(notesTimer);
-      notesTimer = setTimeout(function () {
-        saveState();
-      }, 300);
-    });
+      page.notes = el.notes.value;
+      saveState();
+    };
   }
 
-  function wireBoardEvents() {
-    if (!window.Chessboard) {
+  function installBoard() {
+    if (typeof window.Chess !== 'function' || typeof window.Chessboard !== 'function') {
       return;
     }
 
-    board = Chessboard('chessboard', {
+    board = window.Chessboard('chessboard', {
       draggable: true,
-      pieceTheme: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/{piece}.png',
-      sparePieces: false,
+      pieceTheme: 'https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/www/img/chesspieces/wikipedia/{piece}.png',
       position: 'start',
       orientation: 'white',
       showNotation: false,
-      onDragStart: function (source, piece, position, orientation) {
+      onDragStart: function (source, piece) {
         if (currentView !== 'notebook') {
           return false;
         }
 
-        var page = getPage(currentPageId);
+        var page = pageById(currentPageId);
         if (!page) {
           return false;
         }
 
-        var cursor = getCurrentReviewCursor(currentPageId);
+        var cursor = cursorFor(page);
         if (cursor !== page.moves.length) {
           return false;
         }
@@ -715,16 +625,19 @@
           return 'snapback';
         }
 
-        var page = getPage(currentPageId);
-        if (!page) return 'snapback';
+        var page = pageById(currentPageId);
+        if (!page) {
+          return 'snapback';
+        }
 
-        var cursor = getCurrentReviewCursor(currentPageId);
+        var cursor = cursorFor(page);
         if (cursor !== page.moves.length) {
           return 'snapback';
         }
 
-        var gameState = reconstructGameFromMoves(page.moves);
-        var move = gameState.move({
+        var game = gameFromMoves(page.moves);
+
+        var move = game.move({
           from: source,
           to: target,
           promotion: 'q'
@@ -734,30 +647,42 @@
           return 'snapback';
         }
 
-        var record = normalizeMoveObject({
-          color: move.color,
-          san: move.san,
-          from: move.from,
-          to: move.to,
-          promotion: move.promotion || null,
-          fen: gameState.fen(),
-          moveNumber: Math.floor(page.moves.length / 2) + 1
-        }, Math.floor(page.moves.length / 2) + 1);
+        if (page.moves.length % 2 === 0) {
+          page.moves.push({
+            moveNumber: Math.floor(page.moves.length / 2) + 1,
+            color: 'w',
+            san: move.san,
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion || null,
+            fen: game.fen()
+          });
+        } else {
+          page.moves.push({
+            moveNumber: Math.floor(page.moves.length / 2) + 1,
+            color: 'b',
+            san: move.san,
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion || null,
+            fen: game.fen()
+          });
+        }
 
-        page.moves.push(record);
         page.redoStack = [];
-        replayState[currentPageId] = { cursor: page.moves.length };
-
+        replayState[page.id] = { cursor: page.moves.length };
+        renderMoves(page);
+        renderBoard(page);
+        updateControls(page);
         saveState();
-        renderMoveHistory(currentPageId);
-        syncBoardToReplayState(currentPageId);
-        updateEntryLockUI(currentPageId);
 
         return true;
       }
     });
 
-    syncBoardToReplayState(currentPageId || null);
+    if (currentPageId) {
+      renderBoard(currentPageId);
+    }
   }
 
   function wireCover() {
@@ -769,24 +694,16 @@
   }
 
   function wireNav() {
-    el.previousPageBtn.addEventListener('click', goPrevious);
-    el.nextPageBtn.addEventListener('click', goNext);
+    el.previous.addEventListener('click', previousPage);
+    el.next.addEventListener('click', nextPage);
     el.backToContents.addEventListener('click', function () {
       openContents('backward');
     });
-    el.contentsSearchBtn.addEventListener('click', toggleContentsSearch);
-  }
-
-  function installBoard() {
-    if (!window.Chessboard || !window.Chess) {
-      return;
-    }
-
-    wireBoardEvents();
+    el.contentsSearchBtn.addEventListener('click', toggleSearch);
   }
 
   function init() {
-    installMoveControls();
+    buildControls();
     installBoard();
     wireCover();
     wireNav();
@@ -800,7 +717,7 @@
     renderContents();
 
     if (currentPageId) {
-      syncBoardToReplayState(currentPageId);
+      renderBoard(currentPageId);
     }
   }
 
@@ -811,50 +728,10 @@
       }
     });
 
-    window.addEventListener('beforeunload', function () {
-      saveState();
-    });
-  }
-
-  function bindControlEvents() {
-    var undoBtn = document.getElementById('undo-btn');
-    var redoBtn = document.getElementById('redo-btn');
-    var resetBtn = document.getElementById('reset-btn');
-    var replayPrevBtn = document.getElementById('replay-prev-btn');
-    var replayNextBtn = document.getElementById('replay-next-btn');
-    var continueBtn = document.getElementById('continue-btn');
-
-    if (!undoBtn || !redoBtn || !resetBtn || !replayPrevBtn || !replayNextBtn || !continueBtn) {
-      return;
-    }
-
-    undoBtn.addEventListener('click', function () {
-      undoPly(currentPageId);
-    });
-
-    redoBtn.addEventListener('click', function () {
-      redoPly(currentPageId);
-    });
-
-    resetBtn.addEventListener('click', function () {
-      resetPage(currentPageId);
-    });
-
-    replayPrevBtn.addEventListener('click', function () {
-      replayStep(currentPageId, -1);
-    });
-
-    replayNextBtn.addEventListener('click', function () {
-      replayStep(currentPageId, -1);
-    });
-
-    continueBtn.addEventListener('click', function () {
-      replayGoLive(currentPageId);
-    });
+    window.addEventListener('beforeunload', saveState);
   }
 
   function finalizeSetup() {
-    bindControlEvents();
     persistOnVisibilityChange();
   }
 
